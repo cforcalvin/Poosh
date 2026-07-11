@@ -1,0 +1,411 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0022D906EAF96F8D1D83090D /* FinderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27C25B426D41394EC1129B57 /* FinderService.swift */; };
+		0D386A578AA60434C8CA96D5 /* HotKeyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B68F3CF38C1E96E77E10EE5C /* HotKeyService.swift */; };
+		0E3A55C89DE62BAD96FA522C /* PreviewViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E59152082F41050346EFF4F /* PreviewViewModel.swift */; };
+		2327331BEDED1FA68F8C087E /* PanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65DCE1BD2CAE52845ECA63AC /* PanelController.swift */; };
+		2A24F0D1F35398F302AC2AE9 /* ImagePreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 077B4A8344F669CEC34A0A26 /* ImagePreviewView.swift */; };
+		30C62C1176BE7BD8ADC73B86 /* QuickLookView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20142B408812A631F7209CA /* QuickLookView.swift */; };
+		66F70A188826504A3DF78A23 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42E5CC08B8A2A29D25D2A110 /* AppDelegate.swift */; };
+		6EE00736A557A3D5BBB417ED /* ToneCurve.swift in Sources */ = {isa = PBXBuildFile; fileRef = D44FB8F534E176DC38F8C862 /* ToneCurve.swift */; };
+		6F75FCD204778383786DF7E6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = EB8F38C36BB240FA9570FBE4 /* Assets.xcassets */; };
+		8263893D15B7412BD8E0B16A /* ToneCurveGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36DDDF7DAB1C6AEF8DBCC21D /* ToneCurveGridView.swift */; };
+		AF37B1DE788236AB3A6FFCE4 /* PreviewWindowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 434AFF3F40D4757A5B738207 /* PreviewWindowLayout.swift */; };
+		BC0BB8A17D27CCB6D914369E /* PooshApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CAE455FF3309FEEE509614A /* PooshApp.swift */; };
+		BD5BABEBD3B41434FC5496A3 /* ImageProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F9284B1B24818F8052AB0B6 /* ImageProcessor.swift */; };
+		EA397B4E6B5DBC1A05F0080D /* ToneCurvePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E09593604F4A9E8FF68C53E /* ToneCurvePanel.swift */; };
+		F81D73930FCE1F150340A97E /* ImageFormatValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E07D116FA824A6AD06C088FE /* ImageFormatValidator.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		077B4A8344F669CEC34A0A26 /* ImagePreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImagePreviewView.swift; sourceTree = "<group>"; };
+		0E09593604F4A9E8FF68C53E /* ToneCurvePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToneCurvePanel.swift; sourceTree = "<group>"; };
+		1C7B3EEAB3B5AD070117F0F6 /* Poosh.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Poosh.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		27C25B426D41394EC1129B57 /* FinderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinderService.swift; sourceTree = "<group>"; };
+		2CAE455FF3309FEEE509614A /* PooshApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PooshApp.swift; sourceTree = "<group>"; };
+		36DDDF7DAB1C6AEF8DBCC21D /* ToneCurveGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToneCurveGridView.swift; sourceTree = "<group>"; };
+		42E5CC08B8A2A29D25D2A110 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		434AFF3F40D4757A5B738207 /* PreviewWindowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewWindowLayout.swift; sourceTree = "<group>"; };
+		65DCE1BD2CAE52845ECA63AC /* PanelController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelController.swift; sourceTree = "<group>"; };
+		7F9284B1B24818F8052AB0B6 /* ImageProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageProcessor.swift; sourceTree = "<group>"; };
+		8E59152082F41050346EFF4F /* PreviewViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewViewModel.swift; sourceTree = "<group>"; };
+		9AEED1F5FF3230790687CE53 /* Poosh.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Poosh.entitlements; sourceTree = "<group>"; };
+		A20142B408812A631F7209CA /* QuickLookView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickLookView.swift; sourceTree = "<group>"; };
+		B68F3CF38C1E96E77E10EE5C /* HotKeyService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotKeyService.swift; sourceTree = "<group>"; };
+		D44FB8F534E176DC38F8C862 /* ToneCurve.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToneCurve.swift; sourceTree = "<group>"; };
+		E07D116FA824A6AD06C088FE /* ImageFormatValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageFormatValidator.swift; sourceTree = "<group>"; };
+		EB8F38C36BB240FA9570FBE4 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		3E015A13D6306B56B58B43A2 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				1C7B3EEAB3B5AD070117F0F6 /* Poosh.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		78D4BB403039B1F927E690B0 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				27C25B426D41394EC1129B57 /* FinderService.swift */,
+				B68F3CF38C1E96E77E10EE5C /* HotKeyService.swift */,
+				7F9284B1B24818F8052AB0B6 /* ImageProcessor.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		91888CDCC57D0BD293B9EDE8 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				D44FB8F534E176DC38F8C862 /* ToneCurve.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		AA185EC48EA1EA7362BF9DCA /* Utilities */ = {
+			isa = PBXGroup;
+			children = (
+				E07D116FA824A6AD06C088FE /* ImageFormatValidator.swift */,
+				434AFF3F40D4757A5B738207 /* PreviewWindowLayout.swift */,
+			);
+			path = Utilities;
+			sourceTree = "<group>";
+		};
+		B1B8985C312842E4CBE58506 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				D8515FC4F55C38A2CD3B6691 /* Panel */,
+				F362087972B28AD6C4D73D4E /* Views */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+		D8515FC4F55C38A2CD3B6691 /* Panel */ = {
+			isa = PBXGroup;
+			children = (
+				65DCE1BD2CAE52845ECA63AC /* PanelController.swift */,
+				0E09593604F4A9E8FF68C53E /* ToneCurvePanel.swift */,
+			);
+			path = Panel;
+			sourceTree = "<group>";
+		};
+		F362087972B28AD6C4D73D4E /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				077B4A8344F669CEC34A0A26 /* ImagePreviewView.swift */,
+				8E59152082F41050346EFF4F /* PreviewViewModel.swift */,
+				A20142B408812A631F7209CA /* QuickLookView.swift */,
+				36DDDF7DAB1C6AEF8DBCC21D /* ToneCurveGridView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		F4121921C574845DD5AC7965 = {
+			isa = PBXGroup;
+			children = (
+				F5489B3DF858E401B31C4318 /* Poosh */,
+				3E015A13D6306B56B58B43A2 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		F5489B3DF858E401B31C4318 /* Poosh */ = {
+			isa = PBXGroup;
+			children = (
+				42E5CC08B8A2A29D25D2A110 /* AppDelegate.swift */,
+				EB8F38C36BB240FA9570FBE4 /* Assets.xcassets */,
+				9AEED1F5FF3230790687CE53 /* Poosh.entitlements */,
+				2CAE455FF3309FEEE509614A /* PooshApp.swift */,
+				91888CDCC57D0BD293B9EDE8 /* Models */,
+				78D4BB403039B1F927E690B0 /* Services */,
+				B1B8985C312842E4CBE58506 /* UI */,
+				AA185EC48EA1EA7362BF9DCA /* Utilities */,
+			);
+			path = Poosh;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		0F01086EBE6BF2F9FAEFA9F3 /* Poosh */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E9FA06ADF227B20B12FE1DAF /* Build configuration list for PBXNativeTarget "Poosh" */;
+			buildPhases = (
+				C7B7F52FC7DF4D064F274003 /* Sources */,
+				82992169C14C16434AE1CB8C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Poosh;
+			packageProductDependencies = (
+			);
+			productName = Poosh;
+			productReference = 1C7B3EEAB3B5AD070117F0F6 /* Poosh.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		79584F61518F188062D88D1F /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+			};
+			buildConfigurationList = 5B55D5D6AEECC0079A5300E0 /* Build configuration list for PBXProject "Poosh" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = F4121921C574845DD5AC7965;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 3E015A13D6306B56B58B43A2 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				0F01086EBE6BF2F9FAEFA9F3 /* Poosh */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		82992169C14C16434AE1CB8C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6F75FCD204778383786DF7E6 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		C7B7F52FC7DF4D064F274003 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				66F70A188826504A3DF78A23 /* AppDelegate.swift in Sources */,
+				0022D906EAF96F8D1D83090D /* FinderService.swift in Sources */,
+				0D386A578AA60434C8CA96D5 /* HotKeyService.swift in Sources */,
+				F81D73930FCE1F150340A97E /* ImageFormatValidator.swift in Sources */,
+				2A24F0D1F35398F302AC2AE9 /* ImagePreviewView.swift in Sources */,
+				BD5BABEBD3B41434FC5496A3 /* ImageProcessor.swift in Sources */,
+				2327331BEDED1FA68F8C087E /* PanelController.swift in Sources */,
+				BC0BB8A17D27CCB6D914369E /* PooshApp.swift in Sources */,
+				0E3A55C89DE62BAD96FA522C /* PreviewViewModel.swift in Sources */,
+				AF37B1DE788236AB3A6FFCE4 /* PreviewWindowLayout.swift in Sources */,
+				30C62C1176BE7BD8ADC73B86 /* QuickLookView.swift in Sources */,
+				6EE00736A557A3D5BBB417ED /* ToneCurve.swift in Sources */,
+				8263893D15B7412BD8E0B16A /* ToneCurveGridView.swift in Sources */,
+				EA397B4E6B5DBC1A05F0080D /* ToneCurvePanel.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		17CE6D01C61F67C3ACF0F4CA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				OTHER_LDFLAGS = (
+					"-framework",
+					Carbon,
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+		8D95567BDEC05E827A1BC5EF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Poosh/Poosh.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				"DEVELOPMENT_TEAM[sdk=macosx*]" = GSLU4J8LYR;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Poosh needs access to Finder to read the selected image file.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.poosh.Poosh;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		91498D9275AA16363B15761A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Poosh/Poosh.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				"DEVELOPMENT_TEAM[sdk=macosx*]" = GSLU4J8LYR;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "Poosh needs access to Finder to read the selected image file.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.poosh.Poosh;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		E40771E0BDE9590AC414F206 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				OTHER_LDFLAGS = (
+					"-framework",
+					Carbon,
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		5B55D5D6AEECC0079A5300E0 /* Build configuration list for PBXProject "Poosh" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				17CE6D01C61F67C3ACF0F4CA /* Debug */,
+				E40771E0BDE9590AC414F206 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		E9FA06ADF227B20B12FE1DAF /* Build configuration list for PBXNativeTarget "Poosh" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8D95567BDEC05E827A1BC5EF /* Debug */,
+				91498D9275AA16363B15761A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 79584F61518F188062D88D1F /* Project object */;
+}

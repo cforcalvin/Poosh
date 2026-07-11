@@ -1,0 +1,52 @@
+# Xcode / macOS
+build/
+DerivedData/
+*.xcuserstate
+*.xcuserdata/
+xcuserdata/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+timeline.xctimeline
+playground.xcworkspace
+
+# CocoaPods / SPM
+Pods/
+Carthage/Build/
+.swiftpm/
+Package.resolved
+
+# Archives & release artifacts
+dist/
+*.dmg
+*.pkg
+*.zip
+exportOptions.plist
+
+# Secrets / credentials
+*.p8
+*.p12
+*.cer
+*.mobileprovision
+AuthKey_*.p8
+.env
+.env.*
+!.env.example
+notary-credentials.*
+
+# OS / editor
+.DS_Store
+.AppleDouble
+.LSOverride
+.Spotlight-V100
+.Trashes
+.idea/
+.vscode/
+.cursor/
+*.swp
+*~
+
+# Logs
+*.log

@@ -1,0 +1,27 @@
+name: Poosh
+options:
+  bundleIdPrefix: com.poosh
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    OTHER_LDFLAGS: ["-framework", "Carbon"]
+targets:
+  Poosh:
+    type: application
+    platform: macOS
+    sources:
+      - Poosh
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.poosh.Poosh
+        INFOPLIST_KEY_LSUIElement: YES
+        INFOPLIST_KEY_NSAppleEventsUsageDescription: "Poosh needs access to Finder to read the selected image file."
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_ENTITLEMENTS: Poosh/Poosh.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+    entitlements:
+      path: Poosh/Poosh.entitlements
