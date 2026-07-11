@@ -5,6 +5,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let logger = Logger(subsystem: "com.poosh.Poosh", category: "App")
 
     private var hotKeyService: HotKeyService?
+    private var spaceOverrideService: SpaceOverrideService?
     private let panelController = PanelController()
 
     func applicationWillFinishLaunching(_ notification: Notification) {
@@ -18,17 +19,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         hotKeyService = hotKey
 
+        let spaceOverride = SpaceOverrideService()
+        spaceOverride.onSpace = { [weak self] in
+            self?.handleSpaceOverride()
+        }
+        spaceOverrideService = spaceOverride
+
         DispatchQueue.main.async {
             hotKey.register()
+            spaceOverride.start()
         }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         hotKeyService?.unregister()
+        spaceOverrideService?.stop()
     }
 
     @objc func openSelectedImage() {
         handleHotKey()
+    }
+
+    private func handleSpaceOverride() {
+        if panelController.isPresented {
+            panelController.dismiss(saving: true)
+        } else {
+            handleHotKey()
+        }
     }
 
     private func handleHotKey() {

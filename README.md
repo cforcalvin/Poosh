@@ -7,7 +7,7 @@ A lightweight macOS image previewer for Finder — Quick Look–style browsing w
 
 ## Features
 
-- Open the selected Finder image with **⌘⇧Space**
+- Open the selected Finder image with **Space** (replaces Quick Look while Poosh is running and Finder is frontmost) or **⌘⇧Space**
 - Browse neighboring images with arrow keys (follows Finder selection)
 - Fast tone curve editing in a floating HUD
 - Rotate left / right before saving
@@ -49,9 +49,11 @@ The script produces a signed, notarized, stapled `.app` (and zip) under `dist/`.
 
 1. Launch Poosh (menu bar / accessory app).
 2. Select an image in Finder.
-3. Press **⌘⇧Space** to preview.
+3. Press **Space** (or **⌘⇧Space**) to preview.
 4. Adjust the tone curve or rotate as needed.
 5. Press **Enter** or **Space** to save, or **Esc** to discard.
+
+While Finder is frontmost, Space is claimed by Poosh so Quick Look does not open. In other apps, Space behaves normally.
 
 ## License
 

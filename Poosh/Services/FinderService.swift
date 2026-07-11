@@ -242,6 +242,15 @@ enum FinderService {
   }
 
   private static func runScript(_ source: String) -> Result<String, SelectionError> {
+    if Thread.isMainThread {
+      return executeScript(source)
+    }
+    return DispatchQueue.main.sync {
+      executeScript(source)
+    }
+  }
+
+  private static func executeScript(_ source: String) -> Result<String, SelectionError> {
     guard let script = NSAppleScript(source: source) else {
       return .failure(.scriptFailed("Could not compile AppleScript"))
     }

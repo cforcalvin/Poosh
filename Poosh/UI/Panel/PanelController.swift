@@ -19,6 +19,10 @@ final class PanelController {
   private var isNavigating = false
   private var isDismissing = false
 
+  var isPresented: Bool {
+    imagePanel?.isVisible == true
+  }
+
   func present(url: URL) {
     dismissMonitors()
     dismissPanels()
@@ -77,9 +81,6 @@ final class PanelController {
   }
 
   private func handleArrowKey(direction: FinderNavigationDirection) {
-    if shouldHandleGlobalNavigationKeys {
-      return
-    }
     navigateManually(direction: direction)
   }
 
@@ -93,16 +94,16 @@ final class PanelController {
       return true
     case 123:
       handleArrowKey(direction: .left)
-      return !shouldHandleGlobalNavigationKeys
+      return true
     case 126:
       handleArrowKey(direction: .up)
-      return !shouldHandleGlobalNavigationKeys
+      return true
     case 124:
       handleArrowKey(direction: .right)
-      return !shouldHandleGlobalNavigationKeys
+      return true
     case 125:
       handleArrowKey(direction: .down)
-      return !shouldHandleGlobalNavigationKeys
+      return true
     default:
       return false
     }
@@ -114,8 +115,8 @@ final class PanelController {
 
     let currentPath = viewModel.sourceURL.standardizedFileURL.path
 
-    Task.detached { [weak self] in
-      guard let self else { return }
+    Task { @MainActor in
+      guard !self.isDismissing, !self.isFollowingSelection, !self.isNavigating else { return }
       guard case .success(let url) = FinderService.selectedFileURL() else { return }
       guard ImageFormatValidator.isSupportedImage(url: url) else { return }
       guard url.standardizedFileURL.path != currentPath else { return }
@@ -147,15 +148,11 @@ final class PanelController {
 
       guard await commitCurrentImage() else { return }
 
-      let neighborResult = await Task.detached {
-        FinderService.spatialNeighbor(of: currentURL, direction: direction)
-      }.value
-
+      // Run on the main actor — NSAppleScript is not thread-safe.
+      let neighborResult = FinderService.spatialNeighbor(of: currentURL, direction: direction)
       guard case .success(let nextURL) = neighborResult else { return }
 
-      _ = await Task.detached {
-        FinderService.selectItem(at: nextURL)
-      }.value
+      _ = FinderService.selectItem(at: nextURL)
 
       viewModel.load(url: nextURL)
       applyLayout(animated: true)
@@ -349,11 +346,9 @@ final class PanelController {
     ]
 
     for (keyCode, direction) in mappings where keyDidPress(keyCode) {
-      if shouldHandleGlobalNavigationKeys {
-        followFinderSelectionIfNeeded()
-      } else {
-        handleArrowKey(direction: direction)
-      }
+      // Always drive navigation from Poosh so the preview stays in sync,
+      // even when Finder is frontmost and also receives the arrow key.
+      handleArrowKey(direction: direction)
       return
     }
   }

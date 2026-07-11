@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0022D906EAF96F8D1D83090D /* FinderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27C25B426D41394EC1129B57 /* FinderService.swift */; };
 		0D386A578AA60434C8CA96D5 /* HotKeyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B68F3CF38C1E96E77E10EE5C /* HotKeyService.swift */; };
+		C0D1E2F3A4B506172839A4B5 /* SpaceOverrideService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E1F2A3B4C506172839A4B5 /* SpaceOverrideService.swift */; };
 		0E3A55C89DE62BAD96FA522C /* PreviewViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E59152082F41050346EFF4F /* PreviewViewModel.swift */; };
 		2327331BEDED1FA68F8C087E /* PanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65DCE1BD2CAE52845ECA63AC /* PanelController.swift */; };
 		2A24F0D1F35398F302AC2AE9 /* ImagePreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 077B4A8344F669CEC34A0A26 /* ImagePreviewView.swift */; };
@@ -39,6 +40,7 @@
 		9AEED1F5FF3230790687CE53 /* Poosh.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Poosh.entitlements; sourceTree = "<group>"; };
 		A20142B408812A631F7209CA /* QuickLookView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickLookView.swift; sourceTree = "<group>"; };
 		B68F3CF38C1E96E77E10EE5C /* HotKeyService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotKeyService.swift; sourceTree = "<group>"; };
+		D0E1F2A3B4C506172839A4B5 /* SpaceOverrideService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceOverrideService.swift; sourceTree = "<group>"; };
 		D44FB8F534E176DC38F8C862 /* ToneCurve.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToneCurve.swift; sourceTree = "<group>"; };
 		E07D116FA824A6AD06C088FE /* ImageFormatValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageFormatValidator.swift; sourceTree = "<group>"; };
 		EB8F38C36BB240FA9570FBE4 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -59,6 +61,7 @@
 				27C25B426D41394EC1129B57 /* FinderService.swift */,
 				B68F3CF38C1E96E77E10EE5C /* HotKeyService.swift */,
 				7F9284B1B24818F8052AB0B6 /* ImageProcessor.swift */,
+				D0E1F2A3B4C506172839A4B5 /* SpaceOverrideService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -200,6 +203,7 @@
 				66F70A188826504A3DF78A23 /* AppDelegate.swift in Sources */,
 				0022D906EAF96F8D1D83090D /* FinderService.swift in Sources */,
 				0D386A578AA60434C8CA96D5 /* HotKeyService.swift in Sources */,
+				C0D1E2F3A4B506172839A4B5 /* SpaceOverrideService.swift in Sources */,
 				F81D73930FCE1F150340A97E /* ImageFormatValidator.swift in Sources */,
 				2A24F0D1F35398F302AC2AE9 /* ImagePreviewView.swift in Sources */,
 				BD5BABEBD3B41434FC5496A3 /* ImageProcessor.swift in Sources */,
@@ -290,6 +294,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Poosh/Poosh.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 2;
 				"DEVELOPMENT_TEAM[sdk=macosx*]" = GSLU4J8LYR;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -299,6 +304,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.poosh.Poosh;
 				SDKROOT = macosx;
 			};
@@ -310,6 +316,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Poosh/Poosh.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 2;
 				"DEVELOPMENT_TEAM[sdk=macosx*]" = GSLU4J8LYR;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -319,6 +326,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.poosh.Poosh;
 				SDKROOT = macosx;
 			};
