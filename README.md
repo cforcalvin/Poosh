@@ -2,8 +2,8 @@
 
 A lightweight macOS image previewer for Finder — Quick Look–style browsing with tone curve adjustments and rotation.
 
-<img width="1277" height="742" alt="Screenshot 2026-07-12 at 5 33 07 AM" src="https://github.com/user-attachments/assets/5d89fd3c-4aa5-42ab-bdb1-08035e5d6fd2" />
 <img width="1268" height="736" alt="Screenshot 2026-07-12 at 5 32 02 AM" src="https://github.com/user-attachments/assets/dcfd4521-8e1d-4261-b0d0-89ef7f3cbce7" />
+<img width="1277" height="742" alt="Screenshot 2026-07-12 at 5 33 07 AM" src="https://github.com/user-attachments/assets/5d89fd3c-4aa5-42ab-bdb1-08035e5d6fd2" />
 
 ## Features
 
