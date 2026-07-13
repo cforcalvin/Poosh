@@ -18,7 +18,7 @@ A lightweight macOS image previewer for Finder — Quick Look–style browsing w
 ## Requirements
 
 - macOS 14.0+
-- Automation permission for Finder (System Settings → Privacy & Security → Automation)
+- Automation permission for Finder (System Settings → Privacy & Security → Automation). Poosh must be allowed to control Finder; a system prompt should appear the first time you use it.
 
 ## Build from source
 

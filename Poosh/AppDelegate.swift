@@ -82,8 +82,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let response = alert.runModal()
         if response == .alertSecondButtonReturn {
-            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation") {
-                NSWorkspace.shared.open(url)
+            openAutomationSettings()
+        }
+    }
+
+    private func openAutomationSettings() {
+        let candidates = [
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation",
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Automation",
+        ]
+        for string in candidates {
+            if let url = URL(string: string), NSWorkspace.shared.open(url) {
+                return
             }
         }
     }

@@ -27,7 +27,7 @@ enum FinderService {
     var errorDescription: String? {
       switch self {
       case .automationDenied:
-        return "Poosh needs permission to control Finder. Open System Settings → Privacy & Security → Automation and enable Poosh for Finder."
+        return "Poosh needs permission to control Finder. When the system dialog appears, click OK. Then open System Settings → Privacy & Security → Automation and enable Poosh → Finder."
       case .scriptFailed(let message):
         return "Finder script failed: \(message)"
       case .noSelection:
