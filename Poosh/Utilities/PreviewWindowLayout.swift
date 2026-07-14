@@ -5,9 +5,14 @@ enum PreviewWindowLayout {
   static let padding: CGFloat = 32
   static let maxLongEdge: CGFloat = 1200
   static let screenFillRatio: CGFloat = 0.85
-  static let maxPreviewPixels: CGFloat = 2048
+  static let maxPreviewPixels: CGFloat = 1280
+  /// First paint / arrow browsing — keep this low so HEIC opens feel instant.
+  static let fastPreviewPixels: CGFloat = 512
+  /// Prefetch radius while browsing (±N neighbors).
+  static let prefetchNeighborCount = 3
   static let rotateToolbarHeight: CGFloat = 48
   static let rotateToolbarSpacing: CGFloat = 8
+  static let pdfThumbnailStripWidth: CGFloat = 120
 
   struct CombinedLayout {
     let imagePanelFrame: NSRect
@@ -27,9 +32,10 @@ enum PreviewWindowLayout {
     let maxCombinedHeight = min(visibleFrame.height * screenFillRatio, maxLongEdge)
 
     let curveWidth = showsCurvePanel ? curvePanelSize.width + curveGap : 0
+    let toolbarSpacing = rotateToolbarHeight > 0 ? rotateToolbarSpacing : 0
     let maxImageWidth = max(maxCombinedWidth - curveWidth - padding * 2, 120)
     let maxImageHeight = max(
-      maxCombinedHeight - padding * 2 - rotateToolbarHeight - rotateToolbarSpacing,
+      maxCombinedHeight - padding * 2 - rotateToolbarHeight - toolbarSpacing,
       120
     )
 
@@ -41,7 +47,7 @@ enum PreviewWindowLayout {
 
     let imagePanelSize = NSSize(
       width: fittedImageSize.width + padding * 2,
-      height: fittedImageSize.height + padding * 2 + rotateToolbarHeight + rotateToolbarSpacing
+      height: fittedImageSize.height + padding * 2 + rotateToolbarHeight + toolbarSpacing
     )
 
     let combinedWidth = imagePanelSize.width + curveWidth

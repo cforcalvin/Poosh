@@ -5,7 +5,10 @@ import CoreGraphics
 final class PanelController {
   private static let curveGap: CGFloat = 16
   private static let curvePanelSize = NSSize(width: 320, height: 300)
-  private static let selectionPollInterval: TimeInterval = 0.08
+  /// Arrow / Esc polling — must stay snappy; do NOT run AppleScript on this interval.
+  private static let keyPollInterval: TimeInterval = 0.05
+  /// How often we may ask Finder what is selected (expensive AppleScript).
+  private static let finderFollowInterval: TimeInterval = 5.0
 
   private var imagePanel: ToneCurvePanel?
   private var curvePanel: ToneCurvePanel?
@@ -18,18 +21,49 @@ final class PanelController {
   private var isFollowingSelection = false
   private var isNavigating = false
   private var isDismissing = false
+  private var pendingNavigationDirection: FinderNavigationDirection?
+  private var suppressFinderFollowUntil = Date.distantPast
+  private var lastFinderFollowCheck = Date.distantPast
+  private var lastArrowHandledAt = Date.distantPast
+  private var finderSelectTask: Task<Void, Never>?
+  private var arrowFollowTask: Task<Void, Never>?
+  private static let arrowDebounce: TimeInterval = 0.09
+
+  /// In-memory neighbor list — arrows never call AppleScript once this is loaded.
+  private var browseLayout: FinderBrowseLayout?
 
   var isPresented: Bool {
     imagePanel?.isVisible == true
   }
 
   func present(url: URL) {
+    present(url: url, preserveBrowseLayout: false, activateFinder: true)
+  }
+
+  /// Fresh panel present — Space / hotkey open path.
+  private func present(
+    url: URL,
+    preserveBrowseLayout: Bool,
+    activateFinder: Bool
+  ) {
     dismissMonitors()
     dismissPanels()
+    pendingNavigationDirection = nil
+    viewModel = nil
+
+    if !preserveBrowseLayout || browseLayout == nil || browseLayout?.contains(url) != true {
+      browseLayout = FinderService.browseLayoutFromDisk(around: url)
+    }
 
     let viewModel = PreviewViewModel(url: url)
     viewModel.onNeedsLayout = { [weak self] in
-      self?.applyLayout(animated: true)
+      // Instant frame change — animating aspect-ratio shifts felt sluggish when browsing.
+      // AppKit window frames must be updated on the main thread.
+      if Thread.isMainThread {
+        self?.applyLayout(animated: false)
+      } else {
+        DispatchQueue.main.async { self?.applyLayout(animated: false) }
+      }
     }
     self.viewModel = viewModel
 
@@ -38,7 +72,7 @@ final class PanelController {
       size: layout.imagePanelFrame.size,
       rootView: ImagePanelView(viewModel: viewModel),
       canBecomeKey: false,
-      isMovableByBackground: true
+      isMovableByBackground: viewModel.contentMode == .editableImage
     )
     imagePanel.setFrame(layout.imagePanelFrame, display: false)
     self.imagePanel = imagePanel
@@ -55,13 +89,18 @@ final class PanelController {
     }
 
     attachCurvePanelIfNeeded()
-
     installMonitors()
-    _ = FinderService.activateFinder()
-    imagePanel.orderFront(nil)
 
-    Task {
-      await viewModel.loadContent()
+    // Show panel first — do not block on Finder AppleScript.
+    imagePanel.orderFront(nil)
+    Task { @MainActor in await viewModel.loadContent() }
+    prefetchNeighbors(around: url)
+
+    if activateFinder {
+      Task { @MainActor in
+        try? await Task.sleep(nanoseconds: 30_000_000)
+        _ = FinderService.activateFinder()
+      }
     }
   }
 
@@ -74,6 +113,9 @@ final class PanelController {
       if saving {
         guard await commitCurrentImage() else { return }
       }
+      finderSelectTask?.cancel()
+      arrowFollowTask?.cancel()
+      browseLayout = nil
       dismissMonitors()
       dismissPanels()
       viewModel = nil
@@ -81,7 +123,43 @@ final class PanelController {
   }
 
   private func handleArrowKey(direction: FinderNavigationDirection) {
-    navigateManually(direction: direction)
+    let now = Date()
+    // Global monitors often miss arrows (Finder eats them); key-state polling catches them.
+    // Debounce so monitor + poll never double-advance.
+    guard now.timeIntervalSince(lastArrowHandledAt) >= Self.arrowDebounce else { return }
+    lastArrowHandledAt = now
+    // Finder already moves selection spatially (real up/down). Follow that so
+    // preview stays matched to Finder instead of inventing filename-order neighbors.
+    adoptFinderSelectionAfterArrow(direction: direction)
+  }
+
+  /// After Finder processes the arrow, mirror its selection into the preview.
+  private func adoptFinderSelectionAfterArrow(direction: FinderNavigationDirection) {
+    suppressFinderFollowUntil = Date().addingTimeInterval(5.0)
+    let previousPath = viewModel?.sourceURL.standardizedFileURL.path
+    arrowFollowTask?.cancel()
+    arrowFollowTask = Task { @MainActor [weak self] in
+      // Brief pause so Finder can update selection before we ask.
+      try? await Task.sleep(nanoseconds: 40_000_000)
+      guard !Task.isCancelled, let self else { return }
+
+      let selected = await Task.detached(priority: .userInitiated) {
+        FinderService.selectedFileURL()
+      }.value
+      guard !Task.isCancelled else { return }
+
+      if case .success(let url) = selected,
+         ImageFormatValidator.canPreview(url: url),
+         url.standardizedFileURL.path != previousPath {
+        if self.viewModel?.hasUnsavedChanges == true {
+          guard await self.commitCurrentImage() else { return }
+        }
+        self.showURL(url)
+        return
+      }
+
+      self.navigateManually(direction: direction)
+    }
   }
 
   private func handlePreviewKeyEvent(_ event: NSEvent) -> Bool {
@@ -110,17 +188,28 @@ final class PanelController {
   }
 
   private func followFinderSelectionIfNeeded() {
+    // AppleScript must never run on the main thread — it was freezing arrows for seconds.
     guard !isDismissing, !isFollowingSelection, !isNavigating else { return }
+    guard Date() >= suppressFinderFollowUntil else { return }
+    guard Date().timeIntervalSince(lastFinderFollowCheck) >= Self.finderFollowInterval else { return }
+    lastFinderFollowCheck = Date()
     guard imagePanel?.isVisible == true, let viewModel else { return }
 
     let currentPath = viewModel.sourceURL.standardizedFileURL.path
 
-    Task { @MainActor in
-      guard !self.isDismissing, !self.isFollowingSelection, !self.isNavigating else { return }
-      guard case .success(let url) = FinderService.selectedFileURL() else { return }
-      guard ImageFormatValidator.isSupportedImage(url: url) else { return }
-      guard url.standardizedFileURL.path != currentPath else { return }
-      await self.adoptFinderSelection(url)
+    Task.detached(priority: .utility) { [weak self] in
+      let result = FinderService.selectedFileURL()
+      guard case .success(let url) = result else { return }
+      await MainActor.run {
+        guard let self else { return }
+        guard !self.isDismissing, !self.isFollowingSelection, !self.isNavigating else { return }
+        guard Date() >= self.suppressFinderFollowUntil else { return }
+        guard ImageFormatValidator.canPreview(url: url) else { return }
+        guard url.standardizedFileURL.path != currentPath else { return }
+        Task { @MainActor in
+          await self.adoptFinderSelection(url)
+        }
+      }
     }
   }
 
@@ -133,30 +222,121 @@ final class PanelController {
     defer { isFollowingSelection = false }
 
     guard await commitCurrentImage() else { return }
-    viewModel.load(url: url)
-    applyLayout(animated: true)
-    updateCurvePanelVisibility()
+    suppressFinderFollowUntil = Date().addingTimeInterval(5.0)
+    showURL(url)
   }
 
   private func navigateManually(direction: FinderNavigationDirection) {
-    guard let viewModel, !isNavigating else { return }
-    let currentURL = viewModel.sourceURL
+    guard let viewModel else { return }
 
-    Task { @MainActor in
+
+    if browseLayout == nil || browseLayout?.contains(viewModel.sourceURL) != true {
+      browseLayout = FinderService.browseLayoutFromDisk(around: viewModel.sourceURL)
+    }
+
+    guard let nextURL = browseLayout?.neighbor(of: viewModel.sourceURL, direction: direction) else {
+      return
+    }
+
+    // Dirty images must save first (async). Clean images swap in-place (no panel tear-down flicker).
+    if viewModel.hasUnsavedChanges {
+      if isNavigating {
+        pendingNavigationDirection = direction
+        return
+      }
       isNavigating = true
-      defer { isNavigating = false }
+      Task { @MainActor in
+        defer {
+          self.isNavigating = false
+          if let pending = self.pendingNavigationDirection {
+            self.pendingNavigationDirection = nil
+            self.navigateManually(direction: pending)
+          }
+        }
+        guard await self.commitCurrentImage() else { return }
+        self.suppressFinderFollowUntil = Date().addingTimeInterval(5.0)
+        self.showURL(nextURL)
+        self.syncFinderSelection(to: nextURL)
+      }
+      return
+    }
 
-      guard await commitCurrentImage() else { return }
+    suppressFinderFollowUntil = Date().addingTimeInterval(5.0)
+    showURL(nextURL)
+    syncFinderSelection(to: nextURL)
+  }
 
-      // Run on the main actor — NSAppleScript is not thread-safe.
-      let neighborResult = FinderService.spatialNeighbor(of: currentURL, direction: direction)
-      guard case .success(let nextURL) = neighborResult else { return }
+  /// In-place image swap — keeps the same panels so arrow browse does not flicker.
+  private func showURL(_ url: URL) {
+    guard let viewModel else {
+      present(url: url, preserveBrowseLayout: true, activateFinder: false)
+      return
+    }
 
-      _ = FinderService.selectItem(at: nextURL)
+    let previousMode = viewModel.contentMode
+    viewModel.load(url: url)
+    // Full chrome rebuild only when content kind changes (image ↔ PDF/media).
+    if previousMode != viewModel.contentMode {
+      present(url: url, preserveBrowseLayout: true, activateFinder: false)
+      return
+    }
 
-      viewModel.load(url: nextURL)
-      applyLayout(animated: true)
-      updateCurvePanelVisibility()
+    imagePanel?.isMovableByWindowBackground = viewModel.contentMode == .editableImage
+    applyLayout(animated: false)
+    updateCurvePanelVisibility()
+    prefetchNeighbors(around: url)
+  }
+
+  /// Fallback path only: push Finder selection when we invented the neighbor ourselves.
+  private func syncFinderSelection(to url: URL) {
+    suppressFinderFollowUntil = Date().addingTimeInterval(5.0)
+    finderSelectTask?.cancel()
+    let path = url.lastPathComponent
+    finderSelectTask = Task.detached(priority: .utility) {
+      let result = FinderService.selectItem(at: url, reveal: false)
+      let ok: Bool
+      if case .success = result { ok = true } else { ok = false }
+    }
+  }
+
+  private func prefetchNeighbors(around url: URL) {
+    guard let browseLayout else { return }
+    let count = PreviewWindowLayout.prefetchNeighborCount
+    var urls: [URL] = []
+    var cursor = url
+    for direction in [FinderNavigationDirection.left, .right, .up, .down] {
+      cursor = url
+      for _ in 0..<count {
+        guard let next = browseLayout.neighbor(of: cursor, direction: direction) else { break }
+        urls.append(next)
+        cursor = next
+      }
+    }
+    let neighbors = Array(Set(urls.map { $0.standardizedFileURL })).filter {
+      ImageFormatValidator.isEditableImage(url: $0)
+    }
+
+    // Do not cancel prior prefetches — overlapping work just hits the cache and returns.
+    Task.detached(priority: .utility) {
+      for neighbor in neighbors {
+        // Warm iCloud without blocking paint on the current image.
+        try? FileManager.default.startDownloadingUbiquitousItem(at: neighbor)
+        if PreviewImageCache.image(for: neighbor) != nil { continue }
+        let master: URL = {
+          if let entry = EditLibrary.entry(for: neighbor) { return entry.originalURL }
+          return neighbor
+        }()
+        if let image = ImageProcessor.loadThumbnail(
+          url: master,
+          maxPixelSize: PreviewWindowLayout.fastPreviewPixels
+        ) {
+          PreviewImageCache.store(
+            image,
+            for: neighbor,
+            pixelSize: CGSize(width: image.width, height: image.height)
+          )
+        }
+      }
     }
   }
 
@@ -183,7 +363,9 @@ final class PanelController {
       showsCurvePanel: viewModel.showsCurveTool,
       curvePanelSize: Self.curvePanelSize,
       curveGap: Self.curveGap,
-      rotateToolbarHeight: PreviewWindowLayout.rotateToolbarHeight
+      rotateToolbarHeight: viewModel.showsRotateControls
+        ? PreviewWindowLayout.rotateToolbarHeight
+        : 0
     )
   }
 
@@ -267,7 +449,7 @@ final class PanelController {
     guard let viewModel else { return }
 
     if viewModel.showsCurveTool {
-      applyLayout(animated: true)
+      applyLayout(animated: false)
     } else {
       detachCurvePanel()
       curvePanel = nil
@@ -302,7 +484,7 @@ final class PanelController {
     previousKeyStates = [:]
 
     let timer = Timer(
-      timeInterval: Self.selectionPollInterval,
+      timeInterval: Self.keyPollInterval,
       repeats: true
     ) { [weak self] _ in
       self?.pollFinderNavigation()
@@ -315,6 +497,8 @@ final class PanelController {
     guard imagePanel?.isVisible == true else { return }
 
     pollDismissKeys()
+    // Arrows: CGEventSource polling — NSEvent global monitors never received arrows
+    // in production (selection only updated via Finder follow every 5s).
     pollArrowKeys()
     followFinderSelectionIfNeeded()
   }
@@ -337,6 +521,9 @@ final class PanelController {
 
   private func pollArrowKeys() {
     guard imagePanel?.isVisible == true else { return }
+    // When Finder is frontmost, arrows move Finder selection — we must navigate Poosh
+    // on the same press via key-state, not wait for AppleScript follow.
+    guard shouldHandleGlobalNavigationKeys else { return }
 
     let mappings: [(CGKeyCode, FinderNavigationDirection)] = [
       (123, .left),
@@ -346,8 +533,6 @@ final class PanelController {
     ]
 
     for (keyCode, direction) in mappings where keyDidPress(keyCode) {
-      // Always drive navigation from Poosh so the preview stays in sync,
-      // even when Finder is frontmost and also receives the arrow key.
       handleArrowKey(direction: direction)
       return
     }

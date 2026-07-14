@@ -18,16 +18,26 @@ enum ImageProcessorError: Error, LocalizedError {
   }
 }
 
-final class ImageProcessor {
+/// All access is serialized — concurrent ImageIO/CI work was racing and making
+/// every arrow-key switch after the first one progressively slower.
+final class ImageProcessor: @unchecked Sendable {
+  /// Shared — creating a CIContext per preview open costs hundreds of ms.
+  private static let sharedContext = CIContext(options: [.useSoftwareRenderer: false])
+
   private let colorSpace = CGColorSpaceCreateDeviceRGB()
-  private let context = CIContext(options: [.useSoftwareRenderer: false])
+  private var context: CIContext { Self.sharedContext }
+  private let lock = NSLock()
   private var sourceImage: CIImage?
   private var renderExtent: CGRect = .zero
   private var cachedCurveData: Data?
   private var cachedLUTSignature: [Float] = []
+  /// Bumped on each load/release so in-flight cancelled decodes discard their result.
+  private var epoch = 0
 
   var sourcePixelSize: CGSize {
-    CGSize(width: renderExtent.width, height: renderExtent.height)
+    lock.lock()
+    defer { lock.unlock() }
+    return CGSize(width: renderExtent.width, height: renderExtent.height)
   }
 
   static func pixelSize(for url: URL) -> CGSize {
@@ -39,7 +49,6 @@ final class ImageProcessor {
       return CGSize(width: 800, height: 600)
     }
     let orientation = properties[kCGImagePropertyOrientation] as? Int ?? 1
-    // Match Finder: orientations 5–8 display with width/height swapped.
     if [5, 6, 7, 8].contains(orientation) {
       return CGSize(width: height, height: width)
     }
@@ -58,10 +67,44 @@ final class ImageProcessor {
     ((turns % 4) + 4) % 4
   }
 
-  func loadPreviewSource(url: URL) -> CGImage? {
-    guard let cgImage = loadImage(url: url, maxPixelSize: PreviewWindowLayout.maxPreviewPixels) else {
-      return nil
-    }
+  func setSource(cgImage: CGImage) {
+    lock.lock()
+    defer { lock.unlock() }
+    epoch += 1
+    let ciImage = CIImage(cgImage: cgImage)
+    sourceImage = ciImage
+    renderExtent = ciImage.extent.integral
+    cachedCurveData = nil
+    cachedLUTSignature = []
+  }
+
+  @discardableResult
+  /// Lightweight ImageIO thumbnail — no CIContext. Safe for prefetch on a background queue.
+  static func loadThumbnail(url: URL, maxPixelSize: CGFloat) -> CGImage? {
+    guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+    let options: [CFString: Any] = [
+      kCGImageSourceCreateThumbnailFromImageAlways: true,
+      kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+      kCGImageSourceCreateThumbnailWithTransform: true,
+      kCGImageSourceShouldCacheImmediately: true,
+    ]
+    return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+  }
+
+  func loadPreviewSource(url: URL, maxPixelSize: CGFloat = PreviewWindowLayout.maxPreviewPixels) -> CGImage? {
+    let myEpoch: Int = {
+      lock.lock()
+      epoch += 1
+      let e = epoch
+      lock.unlock()
+      return e
+    }()
+
+    guard let cgImage = loadImage(url: url, maxPixelSize: maxPixelSize) else { return nil }
+
+    lock.lock()
+    defer { lock.unlock() }
+    guard myEpoch == epoch else { return nil }
     let ciImage = CIImage(cgImage: cgImage)
     sourceImage = ciImage
     renderExtent = ciImage.extent.integral
@@ -71,7 +114,19 @@ final class ImageProcessor {
   }
 
   func loadFullSource(url: URL) {
+    let myEpoch: Int = {
+      lock.lock()
+      epoch += 1
+      let e = epoch
+      lock.unlock()
+      return e
+    }()
+
     guard let cgImage = loadImage(url: url, maxPixelSize: nil) else { return }
+
+    lock.lock()
+    defer { lock.unlock() }
+    guard myEpoch == epoch else { return }
     let image = CIImage(cgImage: cgImage)
     sourceImage = image
     renderExtent = image.extent.integral
@@ -79,7 +134,16 @@ final class ImageProcessor {
     cachedLUTSignature = []
   }
 
-  /// Loads image pixels as Finder displays them (EXIF/TIFF orientation applied).
+  func releaseSource() {
+    lock.lock()
+    defer { lock.unlock() }
+    epoch += 1
+    sourceImage = nil
+    renderExtent = .zero
+    cachedCurveData = nil
+    cachedLUTSignature = []
+  }
+
   private func loadImage(url: URL, maxPixelSize: CGFloat?) -> CGImage? {
     guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
 
@@ -114,18 +178,32 @@ final class ImageProcessor {
   }
 
   func applyCurve(lut: [Float], rotationQuarterTurns: Int = 0) -> CGImage? {
-    guard let sourceImage else { return nil }
+    lock.lock()
+    guard let sourceImage else {
+      lock.unlock()
+      return nil
+    }
+    let source = sourceImage
+    let colorSpace = source.colorSpace ?? self.colorSpace
+    let curveData: Data?
+    let identity = isIdentityLUT(lut)
+    if identity {
+      curveData = nil
+    } else {
+      curveData = curvesDataLocked(for: lut)
+    }
+    lock.unlock()
 
     let curved: CIImage
-    if isIdentityLUT(lut) {
-      curved = sourceImage
+    if identity {
+      curved = source
     } else {
-      let curveData = curvesData(for: lut)
-      guard let filter = CIFilter(name: "CIColorCurves") else { return nil }
-      filter.setValue(sourceImage, forKey: kCIInputImageKey)
+      guard let curveData,
+            let filter = CIFilter(name: "CIColorCurves") else { return nil }
+      filter.setValue(source, forKey: kCIInputImageKey)
       filter.setValue(curveData, forKey: "inputCurvesData")
       filter.setValue(CIVector(x: 0, y: 1), forKey: "inputCurvesDomain")
-      filter.setValue(sourceImage.colorSpace ?? colorSpace, forKey: "inputColorSpace")
+      filter.setValue(colorSpace, forKey: "inputColorSpace")
       guard let output = filter.outputImage else { return nil }
       curved = output
     }
@@ -175,7 +253,8 @@ final class ImageProcessor {
     return true
   }
 
-  private func curvesData(for lut: [Float]) -> Data {
+  /// Caller must hold `lock`.
+  private func curvesDataLocked(for lut: [Float]) -> Data {
     if lut == cachedLUTSignature, let cachedCurveData {
       return cachedCurveData
     }

@@ -53,11 +53,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         switch FinderService.selectedFileURL() {
         case .success(let url):
-            guard ImageFormatValidator.isSupportedImage(url: url) else {
-                Self.logger.error("Unsupported or unreadable image at \(url.path, privacy: .public)")
+            guard ImageFormatValidator.canPreview(url: url) else {
+                Self.logger.error("Can't preview file at \(url.path, privacy: .public)")
                 presentAlert(
-                    title: "Unsupported File",
-                    message: "The selected file is not a supported image (.jpg, .jpeg, .png, .heic, .webp)."
+                    title: "Can't Preview",
+                    message: "Quick Look can't preview the selected file."
                 )
                 return
             }
@@ -66,7 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         case .failure(let error):
             Self.logger.error("\(error.localizedDescription, privacy: .public)")
-            presentAlert(title: "Could Not Open Image", message: error.localizedDescription, error: error)
+            presentAlert(title: "Could Not Open File", message: error.localizedDescription, error: error)
         }
     }
 

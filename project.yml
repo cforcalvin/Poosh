@@ -18,8 +18,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.poosh.Poosh
-        MARKETING_VERSION: "1.1.2"
-        CURRENT_PROJECT_VERSION: 4
+        MARKETING_VERSION: "1.2.0"
+        CURRENT_PROJECT_VERSION: 5
         INFOPLIST_KEY_LSUIElement: YES
         INFOPLIST_KEY_NSAppleEventsUsageDescription: "Poosh needs access to Finder to read the selected image file."
         GENERATE_INFOPLIST_FILE: YES

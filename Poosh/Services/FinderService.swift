@@ -9,6 +9,43 @@ enum FinderNavigationDirection {
   case down
 }
 
+struct FinderBrowseItem {
+  let url: URL
+  let x: Double
+  let y: Double
+}
+
+/// Snapshot of a Finder folder used for arrow-key browsing without AppleScript per keypress.
+struct FinderBrowseLayout {
+  let items: [FinderBrowseItem]
+  let usesSpatialNavigation: Bool
+
+  func contains(_ url: URL) -> Bool {
+    let path = url.standardizedFileURL.path
+    return items.contains { $0.url.standardizedFileURL.path == path }
+  }
+
+  func neighbor(of url: URL, direction: FinderNavigationDirection) -> URL? {
+    let path = url.standardizedFileURL.path
+    guard let currentIndex = items.firstIndex(where: {
+      $0.url.standardizedFileURL.path == path
+    }) else { return nil }
+
+    if usesSpatialNavigation {
+      return FinderService.spatialNeighbor(
+        among: items,
+        current: items[currentIndex],
+        direction: direction
+      )
+    }
+    return FinderService.linearNeighbor(
+      among: items,
+      currentIndex: currentIndex,
+      direction: direction
+    )
+  }
+}
+
 private struct FinderSpatialItem {
   let url: URL
   let x: Double
@@ -58,13 +95,14 @@ enum FinderService {
       """).map { _ in () }
   }
 
-  static func selectItem(at url: URL) -> Result<Void, SelectionError> {
+  static func selectItem(at url: URL, reveal: Bool = true) -> Result<Void, SelectionError> {
     let escapedPath = escapedPOSIXPath(url.path)
+    let revealLine = reveal ? "reveal targetItem" : ""
     let script = """
       tell application "Finder"
           set targetItem to POSIX file "\(escapedPath)" as alias
           select targetItem
-          reveal targetItem
+          \(revealLine)
           return "ok"
       end tell
       """
@@ -75,35 +113,102 @@ enum FinderService {
     of url: URL,
     direction: FinderNavigationDirection
   ) -> Result<URL, SelectionError> {
+    switch browseLayout(around: url) {
+    case .failure(let error):
+      return .failure(error)
+    case .success(let layout):
+      guard let neighbor = layout.neighbor(of: url, direction: direction) else {
+        return .failure(.noNeighbor)
+      }
+      return .success(neighbor)
+    }
+  }
+
+  /// Instant folder index using the filesystem — no AppleScript, no per-file metadata.
+  /// Sort order matches Finder's list-style browsing (localized filename).
+  static func browseLayoutFromDisk(around url: URL) -> FinderBrowseLayout {
+    let folder = url.deletingLastPathComponent()
+    // Do not request resourceValues — on iCloud folders that stalls for seconds.
+    let contents = (try? FileManager.default.contentsOfDirectory(
+      at: folder,
+      includingPropertiesForKeys: nil,
+      options: [.skipsHiddenFiles]
+    )) ?? []
+
+    let previewable = contents
+      .filter { ImageFormatValidator.isBrowsablePreview(url: $0) }
+      .sorted {
+        $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
+      }
+
+    let items = previewable.enumerated().map { index, fileURL in
+      FinderBrowseItem(url: fileURL, x: 0, y: Double(index))
+    }
+    return FinderBrowseLayout(items: items, usesSpatialNavigation: false)
+  }
+
+  /// Loads (or returns cached) previewable items via Finder AppleScript — slow; avoid on open/arrows.
+  static func browseLayout(around url: URL) -> Result<FinderBrowseLayout, SelectionError> {
     switch containerItems(for: url) {
     case .failure(let error):
       return .failure(error)
     case .success(let layout):
-      let images = layout.items.filter { ImageFormatValidator.isSupportedImage(url: $0.url) }
-      let currentPath = url.standardizedFileURL.path
-      guard let currentIndex = images.firstIndex(where: {
-        $0.url.standardizedFileURL.path == currentPath
-      }) else {
-        return .failure(.noSelection)
+      let items = layout.items.map {
+        FinderBrowseItem(url: $0.url, x: $0.x, y: $0.y)
       }
+      return .success(FinderBrowseLayout(
+        items: items,
+        usesSpatialNavigation: layout.usesSpatialNavigation
+      ))
+    }
+  }
 
-      let neighbor: URL?
-      if layout.usesSpatialNavigation {
-        neighbor = spatialNeighbor(
-          among: images,
-          current: images[currentIndex],
-          direction: direction
-        )
-      } else {
-        neighbor = linearNeighbor(
-          among: images,
-          currentIndex: currentIndex,
-          direction: direction
-        )
-      }
+  static func linearNeighbor(
+    among items: [FinderBrowseItem],
+    currentIndex: Int,
+    direction: FinderNavigationDirection
+  ) -> URL? {
+    let offset: Int
+    switch direction {
+    case .left, .up:
+      offset = -1
+    case .right, .down:
+      offset = 1
+    }
 
-      guard let neighbor else { return .failure(.noNeighbor) }
-      return .success(neighbor)
+    let newIndex = currentIndex + offset
+    guard items.indices.contains(newIndex) else { return nil }
+    return items[newIndex].url
+  }
+
+  static func spatialNeighbor(
+    among images: [FinderBrowseItem],
+    current: FinderBrowseItem,
+    direction: FinderNavigationDirection
+  ) -> URL? {
+    let candidates: [FinderBrowseItem]
+
+    switch direction {
+    case .right:
+      candidates = images.filter { $0.x > current.x }
+      return candidates.min {
+        abs($0.y - current.y) * 2 + ($0.x - current.x) < abs($1.y - current.y) * 2 + ($1.x - current.x)
+      }?.url
+    case .left:
+      candidates = images.filter { $0.x < current.x }
+      return candidates.min {
+        abs($0.y - current.y) * 2 + (current.x - $0.x) < abs($1.y - current.y) * 2 + (current.x - $1.x)
+      }?.url
+    case .down:
+      candidates = images.filter { $0.y > current.y }
+      return candidates.min {
+        abs($0.x - current.x) * 2 + ($0.y - current.y) < abs($1.x - current.x) * 2 + ($1.y - current.y)
+      }?.url
+    case .up:
+      candidates = images.filter { $0.y < current.y }
+      return candidates.min {
+        abs($0.x - current.x) * 2 + (current.y - $0.y) < abs($1.x - current.x) * 2 + (current.y - $1.y)
+      }?.url
     }
   }
 
@@ -112,7 +217,28 @@ enum FinderService {
     let usesSpatialNavigation: Bool
   }
 
+  private static var neighborCache: (containerPath: String, layout: ContainerLayout, timestamp: Date)?
+
   private static func containerItems(for url: URL) -> Result<ContainerLayout, SelectionError> {
+    let containerPath = url.deletingLastPathComponent().standardizedFileURL.path
+    if let cached = neighborCache,
+       cached.containerPath == containerPath,
+       Date().timeIntervalSince(cached.timestamp) < 30.0 {
+      return .success(cached.layout)
+    }
+
+    let result = fetchContainerItems(for: url)
+    if case .success(let layout) = result {
+      // Filter once when caching — extension-only browse check (no iCloud metadata).
+      let previewable = layout.items.filter { ImageFormatValidator.isBrowsablePreview(url: $0.url) }
+      let filtered = ContainerLayout(items: previewable, usesSpatialNavigation: layout.usesSpatialNavigation)
+      neighborCache = (containerPath, filtered, Date())
+      return .success(filtered)
+    }
+    return result
+  }
+
+  private static func fetchContainerItems(for url: URL) -> Result<ContainerLayout, SelectionError> {
     let escapedPath = escapedPOSIXPath(url.path)
     let script = """
       tell application "Finder"
@@ -184,55 +310,6 @@ enum FinderService {
 
     guard !items.isEmpty else { return .failure(.noSelection) }
     return .success(ContainerLayout(items: items, usesSpatialNavigation: usesSpatialNavigation))
-  }
-
-  private static func linearNeighbor(
-    among images: [FinderSpatialItem],
-    currentIndex: Int,
-    direction: FinderNavigationDirection
-  ) -> URL? {
-    let offset: Int
-    switch direction {
-    case .left, .up:
-      offset = -1
-    case .right, .down:
-      offset = 1
-    }
-
-    let newIndex = currentIndex + offset
-    guard images.indices.contains(newIndex) else { return nil }
-    return images[newIndex].url
-  }
-
-  private static func spatialNeighbor(
-    among images: [FinderSpatialItem],
-    current: FinderSpatialItem,
-    direction: FinderNavigationDirection
-  ) -> URL? {
-    let candidates: [FinderSpatialItem]
-
-    switch direction {
-    case .right:
-      candidates = images.filter { $0.x > current.x }
-      return candidates.min {
-        abs($0.y - current.y) * 2 + ($0.x - current.x) < abs($1.y - current.y) * 2 + ($1.x - current.x)
-      }?.url
-    case .left:
-      candidates = images.filter { $0.x < current.x }
-      return candidates.min {
-        abs($0.y - current.y) * 2 + (current.x - $0.x) < abs($1.y - current.y) * 2 + (current.x - $1.x)
-      }?.url
-    case .down:
-      candidates = images.filter { $0.y > current.y }
-      return candidates.min {
-        abs($0.x - current.x) * 2 + ($0.y - current.y) < abs($1.x - current.x) * 2 + ($1.y - current.y)
-      }?.url
-    case .up:
-      candidates = images.filter { $0.y < current.y }
-      return candidates.min {
-        abs($0.x - current.x) * 2 + (current.y - $0.y) < abs($1.x - current.x) * 2 + (current.y - $1.y)
-      }?.url
-    }
   }
 
   private static func escapedPOSIXPath(_ path: String) -> String {

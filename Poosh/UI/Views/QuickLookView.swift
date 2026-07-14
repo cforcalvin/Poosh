@@ -4,19 +4,35 @@ struct ImagePanelView: View {
   @ObservedObject var viewModel: PreviewViewModel
 
   var body: some View {
-    VStack(spacing: PreviewWindowLayout.rotateToolbarSpacing) {
-      HStack(spacing: 12) {
-        rotateButton(systemName: "rotate.left", help: "Rotate left") {
-          viewModel.rotateLeft()
+    VStack(spacing: viewModel.showsRotateControls ? PreviewWindowLayout.rotateToolbarSpacing : 0) {
+      if viewModel.showsRotateControls {
+        HStack(spacing: 12) {
+          rotateButton(systemName: "rotate.left", help: "Rotate left") {
+            viewModel.rotateLeft()
+          }
+          rotateButton(systemName: "rotate.right", help: "Rotate right") {
+            viewModel.rotateRight()
+          }
         }
-        rotateButton(systemName: "rotate.right", help: "Rotate right") {
-          viewModel.rotateRight()
+        .frame(height: PreviewWindowLayout.rotateToolbarHeight)
+      }
+
+      Group {
+        switch viewModel.contentMode {
+        case .avMedia:
+          MediaPlayerRepresentable(url: viewModel.sourceURL)
+            .frame(minWidth: 640, minHeight: 360)
+        case .pdf:
+          PDFPreviewRepresentable(url: viewModel.sourceURL)
+            .frame(minWidth: 700, minHeight: 500)
+        case .quickLook:
+          QLPreviewRepresentable(url: viewModel.sourceURL)
+            .frame(minWidth: 640, minHeight: 480)
+        case .editableImage:
+          ImagePreviewView(image: viewModel.processedImage, resetID: viewModel.sourceURL)
         }
       }
-      .frame(height: PreviewWindowLayout.rotateToolbarHeight)
-
-      ImagePreviewView(image: viewModel.processedImage)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     .padding(16)
     .frame(maxWidth: .infinity, maxHeight: .infinity)

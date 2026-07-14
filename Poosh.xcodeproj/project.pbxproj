@@ -11,6 +11,11 @@
 		0D386A578AA60434C8CA96D5 /* HotKeyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B68F3CF38C1E96E77E10EE5C /* HotKeyService.swift */; };
 		C0D1E2F3A4B506172839A4B5 /* SpaceOverrideService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E1F2A3B4C506172839A4B5 /* SpaceOverrideService.swift */; };
 		0E3A55C89DE62BAD96FA522C /* PreviewViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E59152082F41050346EFF4F /* PreviewViewModel.swift */; };
+		14A8B2C3D4E5F60718293A01 /* EditLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14A8B2C3D4E5F60718293A02 /* EditLibrary.swift */; };
+		15A8B2C3D4E5F60718293A03 /* QLPreviewRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15A8B2C3D4E5F60718293A04 /* QLPreviewRepresentable.swift */; };
+		16A8B2C3D4E5F60718293A05 /* MediaPlayerRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16A8B2C3D4E5F60718293A06 /* MediaPlayerRepresentable.swift */; };
+		17A8B2C3D4E5F60718293A07 /* PDFPreviewRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17A8B2C3D4E5F60718293A08 /* PDFPreviewRepresentable.swift */; };
+		18A8B2C3D4E5F60718293A09 /* PreviewImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18A8B2C3D4E5F60718293A0A /* PreviewImageCache.swift */; };
 		2327331BEDED1FA68F8C087E /* PanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65DCE1BD2CAE52845ECA63AC /* PanelController.swift */; };
 		2A24F0D1F35398F302AC2AE9 /* ImagePreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 077B4A8344F669CEC34A0A26 /* ImagePreviewView.swift */; };
 		30C62C1176BE7BD8ADC73B86 /* QuickLookView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20142B408812A631F7209CA /* QuickLookView.swift */; };
@@ -28,6 +33,11 @@
 /* Begin PBXFileReference section */
 		077B4A8344F669CEC34A0A26 /* ImagePreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImagePreviewView.swift; sourceTree = "<group>"; };
 		0E09593604F4A9E8FF68C53E /* ToneCurvePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToneCurvePanel.swift; sourceTree = "<group>"; };
+		14A8B2C3D4E5F60718293A02 /* EditLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditLibrary.swift; sourceTree = "<group>"; };
+		15A8B2C3D4E5F60718293A04 /* QLPreviewRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QLPreviewRepresentable.swift; sourceTree = "<group>"; };
+		16A8B2C3D4E5F60718293A06 /* MediaPlayerRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPlayerRepresentable.swift; sourceTree = "<group>"; };
+		17A8B2C3D4E5F60718293A08 /* PDFPreviewRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFPreviewRepresentable.swift; sourceTree = "<group>"; };
+		18A8B2C3D4E5F60718293A0A /* PreviewImageCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewImageCache.swift; sourceTree = "<group>"; };
 		1C7B3EEAB3B5AD070117F0F6 /* Poosh.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Poosh.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		27C25B426D41394EC1129B57 /* FinderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinderService.swift; sourceTree = "<group>"; };
 		2CAE455FF3309FEEE509614A /* PooshApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PooshApp.swift; sourceTree = "<group>"; };
@@ -58,9 +68,11 @@
 		78D4BB403039B1F927E690B0 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				14A8B2C3D4E5F60718293A02 /* EditLibrary.swift */,
 				27C25B426D41394EC1129B57 /* FinderService.swift */,
 				B68F3CF38C1E96E77E10EE5C /* HotKeyService.swift */,
 				7F9284B1B24818F8052AB0B6 /* ImageProcessor.swift */,
+				18A8B2C3D4E5F60718293A0A /* PreviewImageCache.swift */,
 				D0E1F2A3B4C506172839A4B5 /* SpaceOverrideService.swift */,
 			);
 			path = Services;
@@ -105,7 +117,10 @@
 			isa = PBXGroup;
 			children = (
 				077B4A8344F669CEC34A0A26 /* ImagePreviewView.swift */,
+				16A8B2C3D4E5F60718293A06 /* MediaPlayerRepresentable.swift */,
+				17A8B2C3D4E5F60718293A08 /* PDFPreviewRepresentable.swift */,
 				8E59152082F41050346EFF4F /* PreviewViewModel.swift */,
+				15A8B2C3D4E5F60718293A04 /* QLPreviewRepresentable.swift */,
 				A20142B408812A631F7209CA /* QuickLookView.swift */,
 				36DDDF7DAB1C6AEF8DBCC21D /* ToneCurveGridView.swift */,
 			);
@@ -201,9 +216,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				66F70A188826504A3DF78A23 /* AppDelegate.swift in Sources */,
+				14A8B2C3D4E5F60718293A01 /* EditLibrary.swift in Sources */,
 				0022D906EAF96F8D1D83090D /* FinderService.swift in Sources */,
 				0D386A578AA60434C8CA96D5 /* HotKeyService.swift in Sources */,
 				C0D1E2F3A4B506172839A4B5 /* SpaceOverrideService.swift in Sources */,
+				18A8B2C3D4E5F60718293A09 /* PreviewImageCache.swift in Sources */,
 				F81D73930FCE1F150340A97E /* ImageFormatValidator.swift in Sources */,
 				2A24F0D1F35398F302AC2AE9 /* ImagePreviewView.swift in Sources */,
 				BD5BABEBD3B41434FC5496A3 /* ImageProcessor.swift in Sources */,
@@ -211,6 +228,9 @@
 				BC0BB8A17D27CCB6D914369E /* PooshApp.swift in Sources */,
 				0E3A55C89DE62BAD96FA522C /* PreviewViewModel.swift in Sources */,
 				AF37B1DE788236AB3A6FFCE4 /* PreviewWindowLayout.swift in Sources */,
+				15A8B2C3D4E5F60718293A03 /* QLPreviewRepresentable.swift in Sources */,
+				16A8B2C3D4E5F60718293A05 /* MediaPlayerRepresentable.swift in Sources */,
+				17A8B2C3D4E5F60718293A07 /* PDFPreviewRepresentable.swift in Sources */,
 				30C62C1176BE7BD8ADC73B86 /* QuickLookView.swift in Sources */,
 				6EE00736A557A3D5BBB417ED /* ToneCurve.swift in Sources */,
 				8263893D15B7412BD8E0B16A /* ToneCurveGridView.swift in Sources */,
@@ -294,7 +314,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Poosh/Poosh.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				"DEVELOPMENT_TEAM[sdk=macosx*]" = GSLU4J8LYR;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -304,7 +324,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.1.2;
+				MARKETING_VERSION = 1.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.poosh.Poosh;
 				SDKROOT = macosx;
 			};
@@ -316,7 +336,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Poosh/Poosh.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				"DEVELOPMENT_TEAM[sdk=macosx*]" = GSLU4J8LYR;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -326,7 +346,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.1.2;
+				MARKETING_VERSION = 1.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.poosh.Poosh;
 				SDKROOT = macosx;
 			};
