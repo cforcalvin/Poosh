@@ -177,7 +177,11 @@ final class ImageProcessor: @unchecked Sendable {
     return context.createCGImage(ciImage, from: extent, format: .RGBA8, colorSpace: colorSpace) ?? image
   }
 
-  func applyCurve(lut: [Float], rotationQuarterTurns: Int = 0) -> CGImage? {
+  func applyCurve(
+    lut: [Float],
+    rotationQuarterTurns: Int = 0,
+    cropRect: EditRecipe.CropRect? = nil
+  ) -> CGImage? {
     lock.lock()
     guard let sourceImage else {
       lock.unlock()
@@ -208,12 +212,22 @@ final class ImageProcessor: @unchecked Sendable {
       curved = output
     }
 
-    let finalImage = rotated(curved, quarterTurns: rotationQuarterTurns)
+    let rotatedImage = rotated(curved, quarterTurns: rotationQuarterTurns)
+    let finalImage = cropped(rotatedImage, cropRect: cropRect)
     return render(finalImage)
   }
 
-  func exportProcessedImage(lut: [Float], rotationQuarterTurns: Int = 0, to url: URL) throws {
-    guard let image = applyCurve(lut: lut, rotationQuarterTurns: rotationQuarterTurns) else {
+  func exportProcessedImage(
+    lut: [Float],
+    rotationQuarterTurns: Int = 0,
+    cropRect: EditRecipe.CropRect? = nil,
+    to url: URL
+  ) throws {
+    guard let image = applyCurve(
+      lut: lut,
+      rotationQuarterTurns: rotationQuarterTurns,
+      cropRect: cropRect
+    ) else {
       throw ImageProcessorError.renderFailed
     }
     try write(image: image, to: url)
@@ -232,6 +246,25 @@ final class ImageProcessor: @unchecked Sendable {
     }
 
     return image.oriented(orientation)
+  }
+
+  /// `cropRect` is normalized top-left origin (UI space); CIImage is bottom-left.
+  private func cropped(_ image: CIImage, cropRect: EditRecipe.CropRect?) -> CIImage {
+    guard let crop = cropRect?.clamped(), !crop.isIdentity else { return image }
+    let extent = image.extent
+    guard extent.width > 1, extent.height > 1 else { return image }
+
+    let rect = CGRect(
+      x: extent.minX + CGFloat(crop.x) * extent.width,
+      y: extent.minY + CGFloat(1 - crop.y - crop.height) * extent.height,
+      width: CGFloat(crop.width) * extent.width,
+      height: CGFloat(crop.height) * extent.height
+    ).integral
+
+    guard rect.width >= 1, rect.height >= 1 else { return image }
+    return image.cropped(to: rect).transformed(
+      by: CGAffineTransform(translationX: -rect.minX, y: -rect.minY)
+    )
   }
 
   private func render(_ image: CIImage) -> CGImage? {

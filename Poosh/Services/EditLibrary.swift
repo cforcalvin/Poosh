@@ -7,8 +7,32 @@ struct EditRecipe: Codable, Equatable {
     var y: Double
   }
 
+  /// Normalized crop in displayed (post-rotation) image space, origin top-left.
+  struct CropRect: Codable, Equatable {
+    var x: Double
+    var y: Double
+    var width: Double
+    var height: Double
+
+    static let full = CropRect(x: 0, y: 0, width: 1, height: 1)
+
+    var isIdentity: Bool {
+      abs(x) < 0.002 && abs(y) < 0.002
+        && abs(width - 1) < 0.002 && abs(height - 1) < 0.002
+    }
+
+    func clamped() -> CropRect {
+      let x = min(max(self.x, 0), 1)
+      let y = min(max(self.y, 0), 1)
+      let width = min(max(self.width, 0.02), 1 - x)
+      let height = min(max(self.height, 0.02), 1 - y)
+      return CropRect(x: x, y: y, width: width, height: height)
+    }
+  }
+
   var curvePoints: [Point]
   var rotationQuarterTurns: Int
+  var cropRect: CropRect?
   var sourcePath: String
   var fingerprint: String
   var bookmarkData: Data?
@@ -17,6 +41,7 @@ struct EditRecipe: Codable, Equatable {
     EditRecipe(
       curvePoints: [Point(x: 0, y: 0), Point(x: 1, y: 1)],
       rotationQuarterTurns: 0,
+      cropRect: nil,
       sourcePath: sourcePath,
       fingerprint: fingerprint,
       bookmarkData: bookmarkData

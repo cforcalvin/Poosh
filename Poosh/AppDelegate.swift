@@ -7,6 +7,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotKeyService: HotKeyService?
     private var spaceOverrideService: SpaceOverrideService?
     private let panelController = PanelController()
+    /// Bumped to cancel in-flight async opens (Space dismiss must win over a lagged present).
+    private var openRequestID = 0
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -42,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func handleSpaceOverride() {
         if panelController.isPresented {
+            openRequestID += 1
             panelController.dismiss(saving: true)
         } else {
             handleHotKey()
@@ -51,22 +54,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func handleHotKey() {
         Self.logger.info("Hotkey received")
 
-        switch FinderService.selectedFileURL() {
-        case .success(let url):
-            guard ImageFormatValidator.canPreview(url: url) else {
-                Self.logger.error("Can't preview file at \(url.path, privacy: .public)")
-                presentAlert(
-                    title: "Can't Preview",
-                    message: "Quick Look can't preview the selected file."
-                )
-                return
+        openRequestID += 1
+        let requestID = openRequestID
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            // Resolve Finder selection off the open critical path (same pattern as arrow follow).
+            let result = await Task.detached(priority: .userInitiated) {
+                FinderService.selectedFileURL()
+            }.value
+
+            guard requestID == self.openRequestID else { return }
+            guard !self.panelController.isPresented else { return }
+
+            switch result {
+            case .success(let url):
+                guard ImageFormatValidator.canPreview(url: url) else {
+                    Self.logger.error("Can't preview file at \(url.path, privacy: .public)")
+                    presentAlert(
+                        title: "Can't Preview",
+                        message: "Quick Look can't preview the selected file."
+                    )
+                    return
+                }
+
+                panelController.present(url: url)
+
+            case .failure(let error):
+                Self.logger.error("\(error.localizedDescription, privacy: .public)")
+                presentAlert(title: "Could Not Open File", message: error.localizedDescription, error: error)
             }
-
-            panelController.present(url: url)
-
-        case .failure(let error):
-            Self.logger.error("\(error.localizedDescription, privacy: .public)")
-            presentAlert(title: "Could Not Open File", message: error.localizedDescription, error: error)
         }
     }
 

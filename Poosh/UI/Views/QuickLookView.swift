@@ -4,42 +4,63 @@ struct ImagePanelView: View {
   @ObservedObject var viewModel: PreviewViewModel
 
   var body: some View {
-    VStack(spacing: viewModel.showsRotateControls ? PreviewWindowLayout.rotateToolbarSpacing : 0) {
-      if viewModel.showsRotateControls {
-        HStack(spacing: 12) {
-          rotateButton(systemName: "rotate.left", help: "Rotate left") {
-            viewModel.rotateLeft()
-          }
-          rotateButton(systemName: "rotate.right", help: "Rotate right") {
-            viewModel.rotateRight()
-          }
-        }
-        .frame(height: PreviewWindowLayout.rotateToolbarHeight)
-      }
+    ZStack {
+      // Outer frame / padding / toolbar gaps — not the image itself.
+      WindowDragRepresentable()
 
-      Group {
-        switch viewModel.contentMode {
-        case .avMedia:
-          MediaPlayerRepresentable(url: viewModel.sourceURL)
-            .frame(minWidth: 640, minHeight: 360)
-        case .pdf:
-          PDFPreviewRepresentable(url: viewModel.sourceURL)
-            .frame(minWidth: 700, minHeight: 500)
-        case .quickLook:
-          QLPreviewRepresentable(url: viewModel.sourceURL)
-            .frame(minWidth: 640, minHeight: 480)
-        case .editableImage:
-          ImagePreviewView(image: viewModel.processedImage, resetID: viewModel.sourceURL)
+      VStack(spacing: viewModel.showsRotateControls ? PreviewWindowLayout.rotateToolbarSpacing : 0) {
+        if viewModel.showsRotateControls {
+          HStack(spacing: 12) {
+            toolbarButton(systemName: "rotate.left", help: "Rotate left") {
+              viewModel.rotateLeft()
+            }
+            .disabled(viewModel.isCropping)
+
+            toolbarButton(systemName: "rotate.right", help: "Rotate right") {
+              viewModel.rotateRight()
+            }
+            .disabled(viewModel.isCropping)
+
+            Spacer(minLength: 0)
+
+            toolbarButton(systemName: "crop", help: "Crop") {
+              if viewModel.isCropping {
+                viewModel.cancelCropping()
+              } else {
+                viewModel.beginCropping()
+              }
+            }
+          }
+          .frame(height: PreviewWindowLayout.rotateToolbarHeight)
         }
+
+        Group {
+          switch viewModel.contentMode {
+          case .avMedia:
+            MediaPlayerRepresentable(url: viewModel.sourceURL)
+              .frame(minWidth: 640, minHeight: 360)
+          case .pdf:
+            PDFPreviewRepresentable(url: viewModel.sourceURL)
+              .frame(minWidth: 700, minHeight: 500)
+          case .quickLook:
+            QLPreviewRepresentable(url: viewModel.sourceURL)
+              .frame(minWidth: 640, minHeight: 480)
+          case .editableImage:
+            ImagePreviewView(
+              viewModel: viewModel,
+              image: viewModel.processedImage,
+              resetID: viewModel.sourceURL
+            )
+          }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
       }
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .padding(16)
     }
-    .padding(16)
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(Color.clear)
   }
 
-  private func rotateButton(
+  private func toolbarButton(
     systemName: String,
     help: String,
     action: @escaping () -> Void
@@ -78,9 +99,12 @@ struct CurvePanelView: View {
         }
         .buttonStyle(.plain)
         .help("Reset curve")
+        .disabled(viewModel.isCropping)
       }
 
       ToneCurveGridView(toneCurve: viewModel.toneCurve)
+        .allowsHitTesting(!viewModel.isCropping)
+        .opacity(viewModel.isCropping ? 0.45 : 1)
     }
     .padding(16)
     .frame(width: 320, height: 300)
