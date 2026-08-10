@@ -51,6 +51,8 @@ final class PreviewViewModel: ObservableObject {
   private var previewLoadTask: Task<Void, Never>?
   private var idleUpgradeTask: Task<Void, Never>?
   private var suppressCurveBinding = false
+  /// True when first paint already applied recipe edits (crop/rotate/curve) to `processedImage`.
+  private var displayAlreadyHasRecipeEdits = false
 
   var hasUnsavedChanges: Bool {
     guard contentMode == .editableImage else { return false }
@@ -93,6 +95,8 @@ final class PreviewViewModel: ObservableObject {
 
   /// Synchronous first paint for `present()` — path-only recipe lookup, no fingerprint.
   /// Call before `orderFront` so the panel is not empty on first frame.
+  /// Recipe edits (crop/curve/rotate) are scheduled off the main thread so first open
+  /// stays responsive; browsing (`load(url:)`) still applies them synchronously.
   func paintInitialContent() {
     assert(Thread.isMainThread)
     guard contentMode == .editableImage else { return }
@@ -102,6 +106,8 @@ final class PreviewViewModel: ObservableObject {
     if let display = processedImage {
       processor.setSource(cgImage: display)
     }
+    displayAlreadyHasRecipeEdits = false
+    scheduleRecipeEditsIfNeeded()
   }
 
   /// After first paint: deferred fingerprint (relocated files) + idle upgrade.
@@ -139,6 +145,8 @@ final class PreviewViewModel: ObservableObject {
           if let img = self.processedImage {
             self.processor.setSource(cgImage: img)
           }
+          self.displayAlreadyHasRecipeEdits = false
+          self.scheduleRecipeEditsIfNeeded()
           return (self.masterURL, self.processedImage)
         }
         if let reapplied {
@@ -179,6 +187,7 @@ final class PreviewViewModel: ObservableObject {
     cropRect = nil
     baselineCrop = nil
     isCropping = false
+    displayAlreadyHasRecipeEdits = false
     resetImageZoom()
 
     // Mutate points in place — never replace `toneCurve` or the live-preview sink dies.
@@ -197,10 +206,11 @@ final class PreviewViewModel: ObservableObject {
       updateLayoutSizeFromMaster(masterURL)
       paintEditableImageSynchronously(finderURL: url, master: masterURL)
       let master = masterURL
-      let display = processedImage
-      if let display {
+      if let display = processedImage {
         processor.setSource(cgImage: display)
       }
+      displayAlreadyHasRecipeEdits = applyRecipeEditsSynchronouslyIfNeeded()
+      let display = processedImage
       previewLoadTask = Task { [weak self] in
         await self?.finishLoadAfterPaint(
           for: url,
@@ -254,12 +264,18 @@ final class PreviewViewModel: ObservableObject {
     display: CGImage?,
     generation: Int
   ) async {
-    let points = await MainActor.run {
-      (self.toneCurve.points, self.rotationQuarterTurns, self.cropRect)
+    let snapshot = await MainActor.run {
+      (
+        self.toneCurve.points,
+        self.rotationQuarterTurns,
+        self.cropRect,
+        self.displayAlreadyHasRecipeEdits
+      )
     }
-    let turns = points.1
-    let curvePoints = points.0
-    let crop = points.2
+    let turns = snapshot.1
+    let curvePoints = snapshot.0
+    let crop = snapshot.2
+    let alreadyEdited = snapshot.3
     let needsEditPass =
       turns != 0 || !Self.isIdentityCurve(curvePoints) || (crop != nil && !(crop?.isIdentity ?? true))
     let processor = self.processor
@@ -275,21 +291,19 @@ final class PreviewViewModel: ObservableObject {
           self.processedImage = loaded
           PreviewImageCache.store(loaded, for: source)
           processor.setSource(cgImage: loaded)
+          self.displayAlreadyHasRecipeEdits = self.applyRecipeEditsSynchronouslyIfNeeded()
         }
       }
     }
 
     guard !Task.isCancelled else { return }
-    if needsEditPass {
-      await MainActor.run {
-        guard self.loadGeneration == generation, self.sourceURL == source else { return }
+    await MainActor.run {
+      guard self.loadGeneration == generation, self.sourceURL == source else { return }
+      // First paint may already show crop/rotate/curve — avoid a duplicate pass that flashes.
+      if needsEditPass, !alreadyEdited, !self.displayAlreadyHasRecipeEdits {
         self.processEdits(points: curvePoints, rotationQuarterTurns: turns, cropRect: crop)
-        self.scheduleIdleUpgrade(for: source, master: master, generation: generation)
       }
-    } else {
-      await MainActor.run {
-        self.scheduleIdleUpgrade(for: source, master: master, generation: generation)
-      }
+      self.scheduleIdleUpgrade(for: source, master: master, generation: generation)
     }
 
     Task.detached(priority: .utility) {
@@ -299,10 +313,17 @@ final class PreviewViewModel: ObservableObject {
 
   private func scheduleIdleUpgrade(for source: URL, master: URL, generation: Int) {
     idleUpgradeTask?.cancel()
+
+    // Skip second decode when the preview source is already upgrade-quality.
+    let sourceSize = processor.sourcePixelSize
+    if max(sourceSize.width, sourceSize.height) >= PreviewWindowLayout.maxPreviewPixels - 0.5 {
+      return
+    }
+
     let processor = self.processor
     idleUpgradeTask = Task { [weak self] in
-      // Stay out of the way while the user is still arrowing.
-      try? await Task.sleep(nanoseconds: 900_000_000)
+      // Brief settle so fast arrow spam cancels before the heavy decode.
+      try? await Task.sleep(nanoseconds: 100_000_000)
       guard !Task.isCancelled else { return }
       guard let self else { return }
       let stillCurrent = await MainActor.run {
@@ -310,7 +331,7 @@ final class PreviewViewModel: ObservableObject {
       }
       guard stillCurrent else { return }
 
-      let sharper = await Task.detached(priority: .utility) {
+      let sharper = await Task.detached(priority: .userInitiated) {
         processor.loadPreviewSource(url: master, maxPixelSize: PreviewWindowLayout.maxPreviewPixels)
       }.value
 
@@ -332,6 +353,56 @@ final class PreviewViewModel: ObservableObject {
         }
       }
     }
+  }
+
+  /// Apply saved crop/rotation/curve on the current processor source for immediate display.
+  /// Does not write the edited bitmap into the cache (cache stays the unedited master).
+  @discardableResult
+  private func applyRecipeEditsSynchronouslyIfNeeded() -> Bool {
+    guard contentMode == .editableImage else { return false }
+    guard needsRecipeEditPass else { return false }
+    ImageProcessor.warmSharedContextIfNeeded()
+    let lut = ToneCurve(points: toneCurve.points).generateLUT()
+    guard let edited = processor.applyCurve(
+      lut: lut,
+      rotationQuarterTurns: rotationQuarterTurns,
+      cropRect: cropRect
+    ) else {
+      return false
+    }
+    processedImage = edited
+    return true
+  }
+
+  /// Off-main edit pass for first open — keeps Space/Esc responsive while CI runs.
+  private func scheduleRecipeEditsIfNeeded() {
+    guard contentMode == .editableImage else { return }
+    guard needsRecipeEditPass else { return }
+    let lut = ToneCurve(points: toneCurve.points).generateLUT()
+    let turns = rotationQuarterTurns
+    let crop = cropRect
+    let generation = loadGeneration
+    let processor = self.processor
+    Task.detached(priority: .userInitiated) {
+      ImageProcessor.warmSharedContextIfNeeded()
+      let edited = processor.applyCurve(
+        lut: lut,
+        rotationQuarterTurns: turns,
+        cropRect: crop
+      )
+      await MainActor.run {
+        guard self.loadGeneration == generation else { return }
+        guard let edited else { return }
+        self.processedImage = edited
+        self.displayAlreadyHasRecipeEdits = true
+      }
+    }
+  }
+
+  private var needsRecipeEditPass: Bool {
+    rotationQuarterTurns != 0
+      || !Self.isIdentityCurve(toneCurve.points)
+      || (cropRect != nil && !(cropRect?.isIdentity ?? true))
   }
 
   private static func requestUbiquitousDownloadIfNeeded(for url: URL) {

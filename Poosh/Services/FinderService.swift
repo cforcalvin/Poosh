@@ -319,12 +319,9 @@ enum FinderService {
   }
 
   private static func runScript(_ source: String) -> Result<String, SelectionError> {
-    if Thread.isMainThread {
-      return executeScript(source)
-    }
-    return DispatchQueue.main.sync {
-      executeScript(source)
-    }
+    // Run on the calling thread. Never main.sync from a background caller — that freezes
+    // the UI for the entire AppleScript round-trip (first open felt multi-second).
+    executeScript(source)
   }
 
   private static func executeScript(_ source: String) -> Result<String, SelectionError> {

@@ -6,10 +6,10 @@ enum PreviewWindowLayout {
   static let maxLongEdge: CGFloat = 1200
   static let screenFillRatio: CGFloat = 0.85
   static let maxPreviewPixels: CGFloat = 1280
-  /// First paint / arrow browsing — keep this low so HEIC opens feel instant.
-  static let fastPreviewPixels: CGFloat = 512
-  /// Prefetch radius while browsing (±N neighbors).
-  static let prefetchNeighborCount = 3
+  /// First paint / arrow browsing — sharp enough for editing, still cheap to decode.
+  static let fastPreviewPixels: CGFloat = 720
+  /// Prefetch radius while browsing (±N neighbors). Keep small; prefetch at maxPreviewPixels.
+  static let prefetchNeighborCount = 1
   static let rotateToolbarHeight: CGFloat = 48
   static let rotateToolbarSpacing: CGFloat = 8
   static let pdfThumbnailStripWidth: CGFloat = 120

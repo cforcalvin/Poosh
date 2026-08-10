@@ -17,6 +17,13 @@ A lightweight macOS image previewer for Finder — Quick Look–style browsing w
 - Rotate left / right before saving
 - Supports JPEG, PNG, HEIC, and WebP
 
+## What's new in 1.3.1
+
+- **Snappier first open** — Finder selection no longer freezes the UI; Metal/CI warms at launch; monitors install after the first frame
+- **Faster soft→sharp** — shorter upgrade delay, sharper first paint (720px), and ±1 neighbor prefetch at full preview size
+- **Cropped previews match immediately** — saved crop/rotation/curve apply on first paint instead of flashing the uncropped thumb
+- Zoom/pan only while the pointer is over the **image** window (not the curve HUD)
+
 ## What's new in 1.3.0
 
 - Pinch-to-zoom and trackpad pan with edge clamping (image can’t slide fully offscreen)

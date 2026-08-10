@@ -126,8 +126,10 @@ final class PanelController {
 
     // Never makeKey — Finder must keep arrows for spatial selection.
     imagePanel.orderFront(nil)
-    // Monitors / Accessibility after first pixels so prompts cannot delay the image.
-    installMonitors()
+    // Monitors after first frame so Space/Esc can run before event-tap setup finishes.
+    DispatchQueue.main.async { [weak self] in
+      self?.installMonitors()
+    }
     Task { @MainActor in await viewModel.loadContent() }
     prefetchNeighbors(around: url)
 
@@ -407,20 +409,24 @@ final class PanelController {
     let neighbors = Array(Set(urls.map { $0.standardizedFileURL })).filter {
       ImageFormatValidator.isEditableImage(url: $0)
     }
+    let targetPixels = PreviewWindowLayout.maxPreviewPixels
 
     // Do not cancel prior prefetches — overlapping work just hits the cache and returns.
     Task.detached(priority: .utility) {
       for neighbor in neighbors {
         // Warm iCloud without blocking paint on the current image.
         try? FileManager.default.startDownloadingUbiquitousItem(at: neighbor)
-        if PreviewImageCache.image(for: neighbor) != nil { continue }
+        if let existing = PreviewImageCache.entry(for: neighbor) {
+          let longEdge = max(existing.image.width, existing.image.height)
+          if CGFloat(longEdge) >= targetPixels - 1 { continue }
+        }
         let master: URL = {
           if let entry = EditLibrary.entry(for: neighbor) { return entry.originalURL }
           return neighbor
         }()
         if let image = ImageProcessor.loadThumbnail(
           url: master,
-          maxPixelSize: PreviewWindowLayout.fastPreviewPixels
+          maxPixelSize: targetPixels
         ) {
           PreviewImageCache.store(
             image,
@@ -589,7 +595,9 @@ final class PanelController {
       let mouse = NSEvent.mouseLocation
       let dx = event.scrollingDeltaX
       let dy = event.scrollingDeltaY
-      guard self.containsPanel(at: mouse),
+      guard let imagePanel,
+            imagePanel.isVisible,
+            imagePanel.frame.contains(mouse),
             self.viewModel?.contentMode == .editableImage,
             self.viewModel?.isCropping != true else {
         return event
@@ -676,12 +684,12 @@ final class PanelController {
     }
   }
 
-  /// Same hit-test as click-outside dismiss — that path is known to work.
+  /// Zoom/pan only when the pointer is over the image preview — not the curve HUD.
   private func isTrackpadZoomContext(at mouseLocation: NSPoint) -> Bool {
-    guard imagePanel?.isVisible == true else { return false }
+    guard let imagePanel, imagePanel.isVisible else { return false }
     guard viewModel?.contentMode == .editableImage else { return false }
     guard viewModel?.isCropping != true else { return false }
-    return containsPanel(at: mouseLocation)
+    return imagePanel.frame.contains(mouseLocation)
   }
 
   /// Applies zoom from a key event captured off-thread (global monitor).

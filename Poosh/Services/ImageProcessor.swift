@@ -21,8 +21,10 @@ enum ImageProcessorError: Error, LocalizedError {
 /// All access is serialized — concurrent ImageIO/CI work was racing and making
 /// every arrow-key switch after the first one progressively slower.
 final class ImageProcessor: @unchecked Sendable {
-  /// Shared — creating a CIContext per preview open costs hundreds of ms.
+  /// Shared — creating a CIContext costs hundreds of ms; warm once at launch.
   private static let sharedContext = CIContext(options: [.useSoftwareRenderer: false])
+  private static let warmLock = NSLock()
+  private static var didWarmSharedContext = false
 
   private let colorSpace = CGColorSpaceCreateDeviceRGB()
   private var context: CIContext { Self.sharedContext }
@@ -33,6 +35,23 @@ final class ImageProcessor: @unchecked Sendable {
   private var cachedLUTSignature: [Float] = []
   /// Bumped on each load/release so in-flight cancelled decodes discard their result.
   private var epoch = 0
+
+  /// Force Metal/CI pipeline creation off the first-preview critical path.
+  static func warmSharedContextIfNeeded() {
+    warmLock.lock()
+    if didWarmSharedContext {
+      warmLock.unlock()
+      return
+    }
+    didWarmSharedContext = true
+    warmLock.unlock()
+
+    let context = sharedContext
+    let colorSpace = CGColorSpaceCreateDeviceRGB()
+    // Tiny render so the GPU pipeline is actually compiled before the user opens a file.
+    let image = CIImage(color: CIColor(red: 0, green: 0, blue: 0)).cropped(to: CGRect(x: 0, y: 0, width: 8, height: 8))
+    _ = context.createCGImage(image, from: image.extent, format: .RGBA8, colorSpace: colorSpace)
+  }
 
   var sourcePixelSize: CGSize {
     lock.lock()

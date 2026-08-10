@@ -31,6 +31,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hotKey.register()
             spaceOverride.start()
         }
+
+        // Pay CI/Metal startup before the first Space press freezes the UI.
+        DispatchQueue.global(qos: .userInitiated).async {
+            ImageProcessor.warmSharedContextIfNeeded()
+            _ = EditLibrary.entry(for: URL(fileURLWithPath: "/"))
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
