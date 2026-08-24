@@ -63,8 +63,8 @@ final class WindowDragNSView: NSView {
   }
 }
 
-/// Hosting view for the image preview. Pinch/pan are handled by PanelController
-/// (magnify events + scroll) so Finder can stay key for arrow navigation.
+/// Hosting view for the image preview. Forwards trackpad gestures to PanelController
+/// when this window is in the responder chain; CGEvent tap handles Finder-key case.
 final class TrackpadHostingView<Content: View>: NSHostingView<Content> {
   required init(rootView: Content) {
     super.init(rootView: rootView)
@@ -75,4 +75,22 @@ final class TrackpadHostingView<Content: View>: NSHostingView<Content> {
   }
 
   override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+  override func magnify(with event: NSEvent) {
+    PanelController.handleMagnifyFromView(
+      magnification: event.magnification,
+      mouseLocation: NSEvent.mouseLocation
+    )
+  }
+
+  override func scrollWheel(with event: NSEvent) {
+    let handled = PanelController.handleScrollFromView(
+      deltaX: event.scrollingDeltaX,
+      deltaY: event.scrollingDeltaY,
+      mouseLocation: NSEvent.mouseLocation
+    )
+    if !handled {
+      super.scrollWheel(with: event)
+    }
+  }
 }

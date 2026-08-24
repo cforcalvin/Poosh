@@ -11,22 +11,60 @@ struct ImagePanelView: View {
       VStack(spacing: viewModel.showsRotateControls ? PreviewWindowLayout.rotateToolbarSpacing : 0) {
         if viewModel.showsRotateControls {
           HStack(spacing: 12) {
-            toolbarButton(systemName: "rotate.left", help: "Rotate left") {
-              viewModel.rotateLeft()
-            }
-            .disabled(viewModel.isCropping)
+            if viewModel.isCropping {
+              Spacer(minLength: 0)
 
-            toolbarButton(systemName: "rotate.right", help: "Rotate right") {
-              viewModel.rotateRight()
-            }
-            .disabled(viewModel.isCropping)
+              HStack(spacing: 14) {
+                Text(String(format: "%+.0f°", viewModel.straightenDegrees))
+                  .font(.system(size: 13, weight: .semibold).monospacedDigit())
+                  .foregroundStyle(Color.white.opacity(0.9))
+                  .frame(width: 44, alignment: .trailing)
 
-            Spacer(minLength: 0)
+                Slider(
+                  value: Binding(
+                    get: { viewModel.straightenDegrees },
+                    set: { viewModel.setStraightenDegrees($0) }
+                  ),
+                  in: -45...45
+                )
+                .frame(width: 180)
+                .help("Straighten")
 
-            toolbarButton(systemName: "crop", help: "Crop") {
-              if viewModel.isCropping {
-                viewModel.cancelCropping()
-              } else {
+                Button("Cancel") {
+                  viewModel.cancelCropping()
+                }
+                .keyboardShortcut(.cancelAction)
+                .buttonStyle(.bordered)
+
+                Button("Apply") {
+                  viewModel.applyDraftCrop()
+                }
+                .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
+              }
+              .controlSize(.regular)
+
+              Spacer(minLength: 0)
+            } else {
+              toolbarButton(systemName: "rotate.left", help: "Rotate left") {
+                viewModel.rotateLeft()
+              }
+
+              toolbarButton(systemName: "rotate.right", help: "Rotate right") {
+                viewModel.rotateRight()
+              }
+
+              Spacer(minLength: 0)
+
+              toolbarButton(
+                systemName: "circle.lefthalf.filled",
+                help: viewModel.isBlackAndWhite ? "Color (B)" : "Black & White (B)",
+                isActive: viewModel.isBlackAndWhite
+              ) {
+                viewModel.toggleBlackAndWhite()
+              }
+
+              toolbarButton(systemName: "crop", help: "Crop (C)") {
                 viewModel.beginCropping()
               }
             }
@@ -63,13 +101,18 @@ struct ImagePanelView: View {
   private func toolbarButton(
     systemName: String,
     help: String,
+    isActive: Bool = false,
     action: @escaping () -> Void
   ) -> some View {
     Button(action: action) {
       Image(systemName: systemName)
         .font(.system(size: 15, weight: .semibold))
-        .foregroundStyle(.white.opacity(0.9))
+        .foregroundStyle(isActive ? Color.accentColor : Color.white.opacity(0.9))
         .frame(width: 36, height: 36)
+        .background(
+          RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(isActive ? Color.white.opacity(0.18) : Color.clear)
+        )
         .contentShape(Rectangle())
     }
     .buttonStyle(.plain)

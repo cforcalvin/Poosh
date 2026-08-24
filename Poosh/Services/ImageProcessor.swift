@@ -199,7 +199,9 @@ final class ImageProcessor: @unchecked Sendable {
   func applyCurve(
     lut: [Float],
     rotationQuarterTurns: Int = 0,
-    cropRect: EditRecipe.CropRect? = nil
+    cropRect: EditRecipe.CropRect? = nil,
+    straightenDegrees: Double = 0,
+    isBlackAndWhite: Bool = false
   ) -> CGImage? {
     lock.lock()
     guard let sourceImage else {
@@ -231,8 +233,10 @@ final class ImageProcessor: @unchecked Sendable {
       curved = output
     }
 
-    let rotatedImage = rotated(curved, quarterTurns: rotationQuarterTurns)
-    let finalImage = cropped(rotatedImage, cropRect: cropRect)
+    let mono = isBlackAndWhite ? blackAndWhite(curved) : curved
+    let rotatedImage = rotated(mono, quarterTurns: rotationQuarterTurns)
+    let straightenedImage = straightened(rotatedImage, degrees: straightenDegrees)
+    let finalImage = cropped(straightenedImage, cropRect: cropRect)
     return render(finalImage)
   }
 
@@ -240,16 +244,46 @@ final class ImageProcessor: @unchecked Sendable {
     lut: [Float],
     rotationQuarterTurns: Int = 0,
     cropRect: EditRecipe.CropRect? = nil,
+    straightenDegrees: Double = 0,
+    isBlackAndWhite: Bool = false,
     to url: URL
   ) throws {
     guard let image = applyCurve(
       lut: lut,
       rotationQuarterTurns: rotationQuarterTurns,
-      cropRect: cropRect
+      cropRect: cropRect,
+      straightenDegrees: straightenDegrees,
+      isBlackAndWhite: isBlackAndWhite
     ) else {
       throw ImageProcessorError.renderFailed
     }
     try write(image: image, to: url)
+  }
+
+  private func blackAndWhite(_ image: CIImage) -> CIImage {
+    guard let filter = CIFilter(name: "CIColorControls") else { return image }
+    filter.setValue(image, forKey: kCIInputImageKey)
+    filter.setValue(0.0, forKey: kCIInputSaturationKey)
+    // Keep the exact source bounds — filter domains can inflate extent and look like a zoom.
+    return (filter.outputImage ?? image).cropped(to: image.extent)
+  }
+
+  private func render(_ image: CIImage) -> CGImage? {
+    let extent: CGRect
+    if image.extent.isInfinite || image.extent.isNull || image.extent.isEmpty {
+      lock.lock()
+      extent = renderExtent
+      lock.unlock()
+    } else {
+      extent = image.extent.integral
+    }
+    guard extent.width >= 1, extent.height >= 1 else { return nil }
+    return context.createCGImage(
+      image,
+      from: extent,
+      format: .RGBA8,
+      colorSpace: colorSpace
+    )
   }
 
   private func rotated(_ image: CIImage, quarterTurns: Int) -> CIImage {
@@ -265,6 +299,34 @@ final class ImageProcessor: @unchecked Sendable {
     }
 
     return image.oriented(orientation)
+  }
+
+  /// Fine rotation around the image center; expands the canvas to fit.
+  private func straightened(_ image: CIImage, degrees: Double) -> CIImage {
+    let clamped = min(max(degrees, -45), 45)
+    guard abs(clamped) > 0.01 else { return image }
+    let radians = CGFloat(clamped * .pi / 180)
+    let extent = image.extent
+    let transform = CGAffineTransform(translationX: extent.midX, y: extent.midY)
+      .rotated(by: radians)
+      .translatedBy(x: -extent.midX, y: -extent.midY)
+    let rotated = image.transformed(by: transform)
+    let bounds = rotated.extent.integral
+    return rotated.transformed(
+      by: CGAffineTransform(translationX: -bounds.minX, y: -bounds.minY)
+    ).cropped(to: CGRect(origin: .zero, size: bounds.size))
+  }
+
+  static func sizeAfterStraighten(_ size: CGSize, degrees: Double) -> CGSize {
+    let clamped = abs(min(max(degrees, -45), 45))
+    guard clamped > 0.01 else { return size }
+    let radians = clamped * .pi / 180
+    let cosA = cos(radians)
+    let sinA = sin(radians)
+    return CGSize(
+      width: abs(size.width * cosA) + abs(size.height * sinA),
+      height: abs(size.width * sinA) + abs(size.height * cosA)
+    )
   }
 
   /// `cropRect` is normalized top-left origin (UI space); CIImage is bottom-left.
@@ -283,16 +345,6 @@ final class ImageProcessor: @unchecked Sendable {
     guard rect.width >= 1, rect.height >= 1 else { return image }
     return image.cropped(to: rect).transformed(
       by: CGAffineTransform(translationX: -rect.minX, y: -rect.minY)
-    )
-  }
-
-  private func render(_ image: CIImage) -> CGImage? {
-    let extent = image.extent.integral
-    return context.createCGImage(
-      image,
-      from: extent,
-      format: .RGBA8,
-      colorSpace: colorSpace
     )
   }
 

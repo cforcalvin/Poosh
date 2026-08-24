@@ -24,6 +24,11 @@ final class PreviewViewModel: ObservableObject {
   @Published private(set) var contentMode: PreviewContentMode
   @Published private(set) var cropRect: EditRecipe.CropRect?
   @Published var isCropping = false
+  /// Draft crop while the overlay is open (normalized, top-left origin).
+  @Published var draftCrop = EditRecipe.CropRect.full
+  @Published private(set) var isBlackAndWhite = false
+  /// Fine straighten in degrees (−45…45), edited during crop.
+  @Published private(set) var straightenDegrees: Double = 0
   /// Live zoom/pan for the editable image preview (Quick Look–style).
   @Published private(set) var imageScale: CGFloat = 1
   @Published private(set) var imageOffset: CGSize = .zero
@@ -45,6 +50,10 @@ final class PreviewViewModel: ObservableObject {
   private var initialPoints: [CurvePoint]
   private var baselineRotation = 0
   private var baselineCrop: EditRecipe.CropRect?
+  private var baselineBlackAndWhite = false
+  private var baselineStraightenDegrees: Double = 0
+  /// Straighten angle when the current crop session started (restored on Cancel).
+  private var straightenDegreesAtCropStart: Double = 0
   private var cancellables = Set<AnyCancellable>()
   private var processingGeneration = 0
   private var loadGeneration = 0
@@ -59,6 +68,8 @@ final class PreviewViewModel: ObservableObject {
     return hasCurveChanges
       || rotationQuarterTurns != baselineRotation
       || !Self.cropsEqual(cropRect, baselineCrop)
+      || isBlackAndWhite != baselineBlackAndWhite
+      || abs(straightenDegrees - baselineStraightenDegrees) > 0.01
   }
 
   private var hasCurveChanges: Bool {
@@ -111,8 +122,8 @@ final class PreviewViewModel: ObservableObject {
   }
 
   /// After first paint: deferred fingerprint (relocated files) + idle upgrade.
+  @MainActor
   func loadContent() async {
-    assert(Thread.isMainThread)
     guard contentMode == .editableImage else { return }
     if processedImage == nil {
       paintInitialContent()
@@ -187,6 +198,10 @@ final class PreviewViewModel: ObservableObject {
     cropRect = nil
     baselineCrop = nil
     isCropping = false
+    isBlackAndWhite = false
+    baselineBlackAndWhite = false
+    straightenDegrees = 0
+    baselineStraightenDegrees = 0
     displayAlreadyHasRecipeEdits = false
     resetImageZoom()
 
@@ -269,15 +284,23 @@ final class PreviewViewModel: ObservableObject {
         self.toneCurve.points,
         self.rotationQuarterTurns,
         self.cropRect,
-        self.displayAlreadyHasRecipeEdits
+        self.displayAlreadyHasRecipeEdits,
+        self.straightenDegrees,
+        self.isBlackAndWhite
       )
     }
     let turns = snapshot.1
     let curvePoints = snapshot.0
     let crop = snapshot.2
     let alreadyEdited = snapshot.3
+    let straighten = snapshot.4
+    let mono = snapshot.5
     let needsEditPass =
-      turns != 0 || !Self.isIdentityCurve(curvePoints) || (crop != nil && !(crop?.isIdentity ?? true))
+      turns != 0
+      || !Self.isIdentityCurve(curvePoints)
+      || (crop != nil && !(crop?.isIdentity ?? true))
+      || mono
+      || abs(straighten) > 0.01
     let processor = self.processor
 
     if display == nil {
@@ -301,7 +324,13 @@ final class PreviewViewModel: ObservableObject {
       guard self.loadGeneration == generation, self.sourceURL == source else { return }
       // First paint may already show crop/rotate/curve — avoid a duplicate pass that flashes.
       if needsEditPass, !alreadyEdited, !self.displayAlreadyHasRecipeEdits {
-        self.processEdits(points: curvePoints, rotationQuarterTurns: turns, cropRect: crop)
+        self.processEdits(
+          points: curvePoints,
+          rotationQuarterTurns: turns,
+          cropRect: crop,
+          straightenDegrees: straighten,
+          isBlackAndWhite: mono
+        )
       }
       self.scheduleIdleUpgrade(for: source, master: master, generation: generation)
     }
@@ -343,6 +372,8 @@ final class PreviewViewModel: ObservableObject {
           self.rotationQuarterTurns != 0
           || !Self.isIdentityCurve(self.toneCurve.points)
           || (self.cropRect != nil && !(self.cropRect?.isIdentity ?? true))
+          || self.isBlackAndWhite
+          || abs(self.straightenDegrees) > 0.01
         if needsEditPass {
           // Processor already holds the sharper source — reprocess into display
           // without flashing the unedited master.
@@ -366,7 +397,9 @@ final class PreviewViewModel: ObservableObject {
     guard let edited = processor.applyCurve(
       lut: lut,
       rotationQuarterTurns: rotationQuarterTurns,
-      cropRect: cropRect
+      cropRect: cropRect,
+      straightenDegrees: straightenDegrees,
+      isBlackAndWhite: isBlackAndWhite
     ) else {
       return false
     }
@@ -381,6 +414,8 @@ final class PreviewViewModel: ObservableObject {
     let lut = ToneCurve(points: toneCurve.points).generateLUT()
     let turns = rotationQuarterTurns
     let crop = cropRect
+    let straighten = straightenDegrees
+    let mono = isBlackAndWhite
     let generation = loadGeneration
     let processor = self.processor
     Task.detached(priority: .userInitiated) {
@@ -388,7 +423,9 @@ final class PreviewViewModel: ObservableObject {
       let edited = processor.applyCurve(
         lut: lut,
         rotationQuarterTurns: turns,
-        cropRect: crop
+        cropRect: crop,
+        straightenDegrees: straighten,
+        isBlackAndWhite: mono
       )
       await MainActor.run {
         guard self.loadGeneration == generation else { return }
@@ -403,6 +440,8 @@ final class PreviewViewModel: ObservableObject {
     rotationQuarterTurns != 0
       || !Self.isIdentityCurve(toneCurve.points)
       || (cropRect != nil && !(cropRect?.isIdentity ?? true))
+      || isBlackAndWhite
+      || abs(straightenDegrees) > 0.01
   }
 
   private static func requestUbiquitousDownloadIfNeeded(for url: URL) {
@@ -449,16 +488,50 @@ final class PreviewViewModel: ObservableObject {
     applyRotationDelta(1)
   }
 
+  func toggleBlackAndWhite() {
+    guard contentMode == .editableImage, !isCropping else { return }
+    isBlackAndWhite.toggle()
+    reprocessCurrentEdits()
+  }
+
+  /// Set fine straighten while cropping. Clamped to ±45°.
+  func setStraightenDegrees(_ degrees: Double) {
+    guard contentMode == .editableImage, isCropping else { return }
+    let next = min(max(degrees, -45), 45)
+    guard abs(next - straightenDegrees) > 0.001 else { return }
+    straightenDegrees = next
+    reprocessForCroppingSession()
+    updateLayoutSizeFromMaster(masterURL)
+  }
+
   func beginCropping() {
     guard contentMode == .editableImage else { return }
+    straightenDegreesAtCropStart = straightenDegrees
+    if let existing = cropRect, !existing.isIdentity {
+      draftCrop = existing.clamped()
+    } else {
+      draftCrop = .full
+    }
     isCropping = true
+    resetImageZoom()
+    // Show full (uncropped) image so the overlay edits crop against the real frame.
+    reprocessForCroppingSession()
+    updateLayoutSizeFromMaster(masterURL)
   }
 
   @discardableResult
   func cancelCropping() -> Bool {
     guard isCropping else { return false }
     isCropping = false
+    straightenDegrees = straightenDegreesAtCropStart
+    updateLayoutSizeFromMaster(masterURL)
+    reprocessCurrentEdits()
     return true
+  }
+
+  func applyDraftCrop() {
+    applyCrop(draftCrop)
+    resetImageZoom()
   }
 
   func applyCrop(_ rect: EditRecipe.CropRect) {
@@ -491,7 +564,7 @@ final class PreviewViewModel: ObservableObject {
   /// Incremental magnify (NSEvent type `.magnify` / true pinch). `delta` is a small fraction.
   func applyPinchMagnification(_ delta: CGFloat) {
     guard contentMode == .editableImage, !isCropping else { return }
-    guard abs(delta) > 0.0001, abs(delta) < 1.0 else { return }
+    guard abs(delta) > 0.0001 else { return }
     let next = min(max(imageScale * (1 + delta), minImageScale), maxImageScale)
     if next <= 1.01 {
       resetImageZoom()
@@ -568,6 +641,8 @@ final class PreviewViewModel: ObservableObject {
     let points = toneCurve.sortedPoints
     let turns = rotationQuarterTurns
     let crop = cropRect
+    let straighten = straightenDegrees
+    let mono = isBlackAndWhite
     let lut = ToneCurve(points: points).generateLUT()
     let existing = libraryEntry
 
@@ -575,6 +650,8 @@ final class PreviewViewModel: ObservableObject {
       curvePoints: points.map { EditRecipe.Point(x: $0.x, y: $0.y) },
       rotationQuarterTurns: turns,
       cropRect: crop,
+      straightenDegrees: straighten,
+      isBlackAndWhite: mono,
       sourcePath: finderURL.path,
       fingerprint: existing?.recipe.fingerprint ?? "",
       bookmarkData: existing?.recipe.bookmarkData
@@ -593,6 +670,8 @@ final class PreviewViewModel: ObservableObject {
         lut: lut,
         rotationQuarterTurns: turns,
         cropRect: crop,
+        straightenDegrees: straighten,
+        isBlackAndWhite: mono,
         to: finderURL
       )
     }.value
@@ -604,6 +683,8 @@ final class PreviewViewModel: ObservableObject {
     initialPoints = toneCurve.points
     baselineRotation = turns
     baselineCrop = crop
+    baselineStraightenDegrees = straighten
+    baselineBlackAndWhite = mono
   }
 
   private func applyLibraryStateIfAvailable(for url: URL) {
@@ -636,6 +717,10 @@ final class PreviewViewModel: ObservableObject {
     let crop = entry.recipe.cropRect.flatMap { $0.isIdentity ? nil : $0.clamped() }
     cropRect = crop
     baselineCrop = crop
+    straightenDegrees = entry.recipe.straightenDegrees
+    baselineStraightenDegrees = straightenDegrees
+    isBlackAndWhite = entry.recipe.isBlackAndWhite
+    baselineBlackAndWhite = isBlackAndWhite
     updateLayoutSizeFromMaster(masterURL)
   }
 
@@ -650,7 +735,20 @@ final class PreviewViewModel: ObservableObject {
     processEdits(
       points: toneCurve.points,
       rotationQuarterTurns: rotationQuarterTurns,
-      cropRect: cropRect
+      cropRect: isCropping ? nil : cropRect,
+      straightenDegrees: straightenDegrees,
+      isBlackAndWhite: isBlackAndWhite
+    )
+  }
+
+  /// While cropping, omit the saved crop so the overlay targets the full frame.
+  private func reprocessForCroppingSession() {
+    processEdits(
+      points: toneCurve.points,
+      rotationQuarterTurns: rotationQuarterTurns,
+      cropRect: nil,
+      straightenDegrees: straightenDegrees,
+      isBlackAndWhite: isBlackAndWhite
     )
   }
 
@@ -665,7 +763,9 @@ final class PreviewViewModel: ObservableObject {
         self.processEdits(
           points: points,
           rotationQuarterTurns: self.rotationQuarterTurns,
-          cropRect: self.cropRect
+          cropRect: self.isCropping ? nil : self.cropRect,
+          straightenDegrees: self.straightenDegrees,
+          isBlackAndWhite: self.isBlackAndWhite
         )
       }
       .store(in: &cancellables)
@@ -674,7 +774,9 @@ final class PreviewViewModel: ObservableObject {
   private func processEdits(
     points: [CurvePoint],
     rotationQuarterTurns: Int,
-    cropRect: EditRecipe.CropRect?
+    cropRect: EditRecipe.CropRect?,
+    straightenDegrees: Double,
+    isBlackAndWhite: Bool
   ) {
     guard contentMode == .editableImage else { return }
     processingGeneration += 1
@@ -682,13 +784,17 @@ final class PreviewViewModel: ObservableObject {
     let lut = ToneCurve(points: points).generateLUT()
     let turns = rotationQuarterTurns
     let crop = cropRect
+    let straighten = straightenDegrees
+    let mono = isBlackAndWhite
     let processor = self.processor
 
     Task.detached(priority: .userInitiated) {
       let image = processor.applyCurve(
         lut: lut,
         rotationQuarterTurns: turns,
-        cropRect: crop
+        cropRect: crop,
+        straightenDegrees: straighten,
+        isBlackAndWhite: mono
       )
       await MainActor.run {
         guard self.processingGeneration == generation else { return }
@@ -704,14 +810,16 @@ final class PreviewViewModel: ObservableObject {
       for: size,
       rotationQuarterTurns: rotationQuarterTurns
     )
+    let straightened = ImageProcessor.sizeAfterStraighten(rotated, degrees: straightenDegrees)
     let displayed: CGSize
-    if let crop = cropRect, !crop.isIdentity {
+    // While cropping we show the uncropped frame.
+    if !isCropping, let crop = cropRect, !crop.isIdentity {
       displayed = CGSize(
-        width: max(rotated.width * crop.width, 1),
-        height: max(rotated.height * crop.height, 1)
+        width: max(straightened.width * crop.width, 1),
+        height: max(straightened.height * crop.height, 1)
       )
     } else {
-      displayed = rotated
+      displayed = straightened
     }
     let changed =
       abs(nativePixelSize.width - size.width) > 40

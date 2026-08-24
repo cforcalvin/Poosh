@@ -33,15 +33,63 @@ struct EditRecipe: Codable, Equatable {
   var curvePoints: [Point]
   var rotationQuarterTurns: Int
   var cropRect: CropRect?
+  /// Fine straighten angle in degrees (−45…45), applied after quarter turns.
+  var straightenDegrees: Double
+  var isBlackAndWhite: Bool
   var sourcePath: String
   var fingerprint: String
   var bookmarkData: Data?
+
+  enum CodingKeys: String, CodingKey {
+    case curvePoints
+    case rotationQuarterTurns
+    case cropRect
+    case straightenDegrees
+    case isBlackAndWhite
+    case sourcePath
+    case fingerprint
+    case bookmarkData
+  }
+
+  init(
+    curvePoints: [Point],
+    rotationQuarterTurns: Int,
+    cropRect: CropRect?,
+    straightenDegrees: Double = 0,
+    isBlackAndWhite: Bool = false,
+    sourcePath: String,
+    fingerprint: String,
+    bookmarkData: Data?
+  ) {
+    self.curvePoints = curvePoints
+    self.rotationQuarterTurns = rotationQuarterTurns
+    self.cropRect = cropRect
+    self.straightenDegrees = straightenDegrees
+    self.isBlackAndWhite = isBlackAndWhite
+    self.sourcePath = sourcePath
+    self.fingerprint = fingerprint
+    self.bookmarkData = bookmarkData
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    curvePoints = try c.decode([Point].self, forKey: .curvePoints)
+    rotationQuarterTurns = try c.decode(Int.self, forKey: .rotationQuarterTurns)
+    cropRect = try c.decodeIfPresent(CropRect.self, forKey: .cropRect)
+    straightenDegrees = try c.decodeIfPresent(Double.self, forKey: .straightenDegrees) ?? 0
+    isBlackAndWhite = try c.decodeIfPresent(Bool.self, forKey: .isBlackAndWhite) ?? false
+    sourcePath = try c.decode(String.self, forKey: .sourcePath)
+    fingerprint = try c.decode(String.self, forKey: .fingerprint)
+    bookmarkData = try c.decodeIfPresent(Data.self, forKey: .bookmarkData)
+  }
 
   static func identity(sourcePath: String, fingerprint: String, bookmarkData: Data?) -> EditRecipe {
     EditRecipe(
       curvePoints: [Point(x: 0, y: 0), Point(x: 1, y: 1)],
       rotationQuarterTurns: 0,
       cropRect: nil,
+      straightenDegrees: 0,
+      isBlackAndWhite: false,
       sourcePath: sourcePath,
       fingerprint: fingerprint,
       bookmarkData: bookmarkData

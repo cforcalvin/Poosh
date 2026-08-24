@@ -7,9 +7,6 @@ struct ImagePreviewView: View {
   /// Changes when the file changes so zoom resets.
   let resetID: URL
 
-  /// Normalized crop rect while editing (top-left origin). Starts full-frame.
-  @State private var draftCrop = EditRecipe.CropRect.full
-
   var body: some View {
     GeometryReader { geometry in
       ZStack {
@@ -36,7 +33,7 @@ struct ImagePreviewView: View {
                 CropOverlayView(
                   imageSize: fittedImageSize(image: image, in: geometry.size),
                   containerSize: geometry.size,
-                  crop: $draftCrop
+                  crop: $viewModel.draftCrop
                 )
               }
             }
@@ -51,38 +48,9 @@ struct ImagePreviewView: View {
       // Claim the whole preview so clicks never fall through to window-drag chrome.
       .contentShape(Rectangle())
       .clipped()
-      .overlay(alignment: .bottom) {
-        if viewModel.isCropping {
-          HStack(spacing: 16) {
-            Button("Cancel") {
-              viewModel.cancelCropping()
-            }
-            .keyboardShortcut(.cancelAction)
-
-            Button("Apply") {
-              viewModel.applyCrop(draftCrop)
-              viewModel.resetImageZoom()
-            }
-            .keyboardShortcut(.defaultAction)
-          }
-          .buttonStyle(.borderedProminent)
-          .controlSize(.large)
-          .padding(.bottom, 12)
-        }
-      }
     }
     .onChange(of: resetID) { _, _ in
       viewModel.resetImageZoom()
-    }
-    .onChange(of: viewModel.isCropping) { _, isCropping in
-      if isCropping {
-        viewModel.resetImageZoom()
-        if let existing = viewModel.cropRect, !existing.isIdentity {
-          draftCrop = existing.clamped()
-        } else {
-          draftCrop = .full
-        }
-      }
     }
   }
 
@@ -141,15 +109,33 @@ private struct CropOverlayView: View {
         .allowsHitTesting(false)
 
       ForEach(CropHandle.allCases, id: \.self) { handle in
-        Circle()
-          .fill(Color.white)
-          .frame(width: handleSize, height: handleSize)
-          .shadow(radius: 1)
+        cropHandleView(handle)
           .position(handlePoint(handle))
           .gesture(resizeGesture(handle))
       }
     }
     .contentShape(Rectangle())
+  }
+
+  @ViewBuilder
+  private func cropHandleView(_ handle: CropHandle) -> some View {
+    switch handle {
+    case .topLeft, .topRight, .bottomLeft, .bottomRight:
+      Circle()
+        .fill(Color.white)
+        .frame(width: handleSize, height: handleSize)
+        .shadow(radius: 1)
+    case .top, .bottom:
+      Capsule()
+        .fill(Color.white)
+        .frame(width: 28, height: 8)
+        .shadow(radius: 1)
+    case .left, .right:
+      Capsule()
+        .fill(Color.white)
+        .frame(width: 8, height: 28)
+        .shadow(radius: 1)
+    }
   }
 
   private func handlePoint(_ handle: CropHandle) -> CGPoint {
@@ -158,6 +144,10 @@ private struct CropOverlayView: View {
     case .topRight: return CGPoint(x: cropFrame.maxX, y: cropFrame.minY)
     case .bottomLeft: return CGPoint(x: cropFrame.minX, y: cropFrame.maxY)
     case .bottomRight: return CGPoint(x: cropFrame.maxX, y: cropFrame.maxY)
+    case .top: return CGPoint(x: cropFrame.midX, y: cropFrame.minY)
+    case .bottom: return CGPoint(x: cropFrame.midX, y: cropFrame.maxY)
+    case .left: return CGPoint(x: cropFrame.minX, y: cropFrame.midY)
+    case .right: return CGPoint(x: cropFrame.maxX, y: cropFrame.midY)
     }
   }
 
@@ -212,18 +202,34 @@ private struct CropOverlayView: View {
         case .bottomRight:
           w += dx
           h += dy
+        case .top:
+          y += dy
+          h -= dy
+        case .bottom:
+          h += dy
+        case .left:
+          x += dx
+          w -= dx
+        case .right:
+          w += dx
         }
 
         let minSize = 0.05
         if w < minSize {
-          if handle == .topLeft || handle == .bottomLeft {
+          switch handle {
+          case .topLeft, .bottomLeft, .left:
             x = start.x + start.width - minSize
+          default:
+            break
           }
           w = minSize
         }
         if h < minSize {
-          if handle == .topLeft || handle == .topRight {
+          switch handle {
+          case .topLeft, .topRight, .top:
             y = start.y + start.height - minSize
+          default:
+            break
           }
           h = minSize
         }
@@ -238,5 +244,5 @@ private struct CropOverlayView: View {
 }
 
 private enum CropHandle: CaseIterable {
-  case topLeft, topRight, bottomLeft, bottomRight
+  case topLeft, top, topRight, right, bottomRight, bottom, bottomLeft, left
 }

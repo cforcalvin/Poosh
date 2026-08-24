@@ -199,12 +199,13 @@ final class PanelController {
   }
 
   private func handlePreviewKeyEvent(_ event: NSEvent) -> Bool {
-    // Esc cancels crop mode before dismissing the panel.
+    // Esc: cancel crop, or dismiss without saving in normal mode.
     if event.keyCode == 53 {
-      if viewModel?.cancelCropping() == true {
-        return true
+      if viewModel?.isCropping == true {
+        viewModel?.cancelCropping()
+      } else {
+        dismiss(saving: false)
       }
-      dismiss(saving: false)
       return true
     }
 
@@ -214,8 +215,18 @@ final class PanelController {
       return true
     }
 
-    // While cropping, ignore arrows / enter so we don't navigate mid-crop.
+    if handleEditToolKeyEvent(
+      modifiers: event.modifierFlags,
+      charactersIgnoringModifiers: event.charactersIgnoringModifiers
+    ) {
+      return true
+    }
+
+    // Crop mode: Enter applies; all other keys (except Esc above) are swallowed.
     if viewModel?.isCropping == true {
+      if event.keyCode == 36 || event.keyCode == 76 {
+        viewModel?.applyDraftCrop()
+      }
       return true
     }
 
@@ -234,6 +245,33 @@ final class PanelController {
       return true
     case 125:
       handleArrowKey(direction: .down)
+      return true
+    default:
+      return false
+    }
+  }
+
+  /// Unmodified letter shortcuts: B = black & white, C = crop.
+  private func handleEditToolKeyEvent(
+    modifiers: NSEvent.ModifierFlags,
+    charactersIgnoringModifiers: String?
+  ) -> Bool {
+    let mods = modifiers.intersection(.deviceIndependentFlagsMask)
+    guard !mods.contains(.command),
+          !mods.contains(.option),
+          !mods.contains(.control),
+          viewModel?.contentMode == .editableImage else {
+      return false
+    }
+
+    switch charactersIgnoringModifiers?.lowercased() {
+    case "c":
+      guard viewModel?.isCropping != true else { return true }
+      viewModel?.beginCropping()
+      return true
+    case "b":
+      guard viewModel?.isCropping != true else { return false }
+      viewModel?.toggleBlackAndWhite()
       return true
     default:
       return false
@@ -597,7 +635,7 @@ final class PanelController {
       let dy = event.scrollingDeltaY
       guard let imagePanel,
             imagePanel.isVisible,
-            imagePanel.frame.contains(mouse),
+            self.isTrackpadZoomContext(at: mouse),
             self.viewModel?.contentMode == .editableImage,
             self.viewModel?.isCropping != true else {
         return event
@@ -676,28 +714,137 @@ final class PanelController {
   }
 
   private func handleTrackpadMagnifyCaptured(magnification: CGFloat, mouseLocation: NSPoint) {
-    guard isTrackpadZoomContext(at: mouseLocation) else { return }
-    guard abs(magnification) > 0.0001, abs(magnification) < 1.0 else { return }
-    let mag = magnification
-    DispatchQueue.main.async { [weak self] in
-      self?.viewModel?.applyPinchMagnification(mag)
+    let apply = { [weak self] in
+      guard let self else { return }
+      guard self.isTrackpadZoomContext(at: mouseLocation) else { return }
+      guard abs(magnification) > 0.0001 else { return }
+      let mag = min(max(magnification, -0.95), 0.95)
+      self.viewModel?.applyPinchMagnification(mag)
+    }
+    if Thread.isMainThread {
+      apply()
+    } else {
+      DispatchQueue.main.async(execute: apply)
     }
   }
 
-  /// Zoom/pan only when the pointer is over the image preview — not the curve HUD.
+  /// True when the pointer is over the image panel (not the curve HUD).
   private func isTrackpadZoomContext(at mouseLocation: NSPoint) -> Bool {
-    guard let imagePanel, imagePanel.isVisible else { return false }
+    guard imagePanelFrameContains(mouseLocation) else { return false }
     guard viewModel?.contentMode == .editableImage else { return false }
     guard viewModel?.isCropping != true else { return false }
-    return imagePanel.frame.contains(mouseLocation)
+    return true
   }
 
-  /// Applies zoom from a key event captured off-thread (global monitor).
+  private func imagePanelFrameContains(_ point: NSPoint) -> Bool {
+    guard let imagePanel, imagePanel.isVisible else { return false }
+    return imagePanel.frame.contains(point)
+  }
+
+  static func handleMagnifyFromView(
+    magnification: CGFloat,
+    mouseLocation: NSPoint
+  ) {
+    magnifyTapOwner?.handleTrackpadMagnifyCaptured(
+      magnification: magnification,
+      mouseLocation: mouseLocation
+    )
+  }
+
+  static func handleScrollFromView(
+    deltaX: CGFloat,
+    deltaY: CGFloat,
+    mouseLocation: NSPoint
+  ) -> Bool {
+    guard let owner = magnifyTapOwner else { return false }
+    return owner.handleTrackpadScrollCaptured(
+      deltaX: deltaX,
+      deltaY: deltaY,
+      mouseLocation: mouseLocation
+    )
+  }
+
+  private static func imagePanelContainsMouse(_ point: NSPoint) -> Bool {
+    magnifyTapOwner?.imagePanelFrameContains(point) ?? false
+  }
+
+  private static func handleMagnifyFromCGEvent(_ cgEvent: CGEvent, magnification: CGFloat) {
+    DispatchQueue.main.async {
+      let mouse = NSEvent.mouseLocation
+      magnifyTapOwner?.handleTrackpadMagnifyCaptured(
+        magnification: magnification,
+        mouseLocation: mouse
+      )
+    }
+  }
+
+  private static func handleScrollFromCGEvent(_ cgEvent: CGEvent) {
+    DispatchQueue.main.async {
+      let mouse = NSEvent.mouseLocation
+      let nsEvent = NSEvent(cgEvent: cgEvent)
+      let pointDY = cgEvent.getDoubleValueField(.scrollWheelEventPointDeltaAxis1)
+      let pointDX = cgEvent.getDoubleValueField(.scrollWheelEventPointDeltaAxis2)
+      let lineDY = cgEvent.getDoubleValueField(.scrollWheelEventDeltaAxis1)
+      let lineDX = cgEvent.getDoubleValueField(.scrollWheelEventDeltaAxis2)
+      let dx = nsEvent?.scrollingDeltaX ?? (abs(pointDX) > 0 ? CGFloat(pointDX) : CGFloat(lineDX))
+      let dy = nsEvent?.scrollingDeltaY ?? (abs(pointDY) > 0 ? CGFloat(pointDY) : CGFloat(lineDY))
+      _ = magnifyTapOwner?.handleTrackpadScrollCaptured(
+        deltaX: dx,
+        deltaY: dy,
+        mouseLocation: mouse
+      )
+    }
+  }
+
+  /// Swallow magnify/scroll over the image panel so Finder doesn't consume the gesture.
+  private static func trackpadCGEventCallback(
+    _ type: CGEventType,
+    _ cgEvent: CGEvent
+  ) -> Unmanaged<CGEvent>? {
+    let mouse = NSPoint(x: cgEvent.location.x, y: cgEvent.location.y)
+    let overPanel = imagePanelContainsMouse(mouse)
+
+    if type.rawValue == 30 {
+      let ns = NSEvent(cgEvent: cgEvent)
+      let zoomField = CGEventField(rawValue: 113)!
+      let mag = ns?.magnification ?? CGFloat(cgEvent.getDoubleValueField(zoomField))
+      if overPanel, abs(mag) > 0.0001 {
+        handleMagnifyFromCGEvent(cgEvent, magnification: mag)
+        return nil
+      }
+    } else if type.rawValue == 29 {
+      if overPanel {
+        let zoom = cgEvent.getDoubleValueField(CGEventField(rawValue: 113)!)
+        let kind = cgEvent.getDoubleValueField(CGEventField(rawValue: 110)!)
+        if abs(kind - 6.0) > 0.1, abs(zoom) > 0.00001 {
+          handleMagnifyFromCGEvent(cgEvent, magnification: CGFloat(zoom))
+          return nil
+        }
+      }
+    } else if type == .scrollWheel, overPanel {
+      let scale = magnifyTapOwner?.viewModel?.imageScale ?? 1
+      if scale > 1.01 {
+        handleScrollFromCGEvent(cgEvent)
+        return nil
+      }
+    }
+
+    return Unmanaged.passUnretained(cgEvent)
+  }
+
+  /// Applies zoom / edit-tool keys from an event captured off-thread (global monitor).
   private func handlePreviewKeyEventCaptured(
     keyCode: UInt16,
     modifiers: NSEvent.ModifierFlags,
     charactersIgnoringModifiers: String?
   ) {
+    if handleEditToolKeyEvent(
+      modifiers: modifiers,
+      charactersIgnoringModifiers: charactersIgnoringModifiers
+    ) {
+      return
+    }
+
     let mods = modifiers.intersection(.deviceIndependentFlagsMask)
     guard mods.contains(.command),
           !mods.contains(.option),
@@ -742,7 +889,7 @@ final class PanelController {
     guard let tap = CGEvent.tapCreate(
       tap: tapLocation,
       place: .headInsertEventTap,
-      options: .listenOnly,
+      options: .defaultTap,
       eventsOfInterest: mask,
       callback: { _, type, cgEvent, _ -> Unmanaged<CGEvent>? in
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
@@ -752,61 +899,7 @@ final class PanelController {
           return Unmanaged.passUnretained(cgEvent)
         }
 
-        let mouse = NSEvent.mouseLocation
-        let zoomField = CGEventField(rawValue: 113)!
-
-        if type.rawValue == 30 {
-          // True magnify — thumb+index pinch when Accessibility allows the tap.
-          let ns = NSEvent(cgEvent: cgEvent)
-          let mag = ns?.magnification
-            ?? CGFloat(cgEvent.getDoubleValueField(zoomField))
-          DispatchQueue.main.async {
-            guard let owner = PanelController.magnifyTapOwner else { return }
-            owner.handleTrackpadMagnifyCaptured(
-              magnification: mag,
-              mouseLocation: mouse
-            )
-          }
-          return Unmanaged.passUnretained(cgEvent)
-        }
-
-        if type.rawValue == 29 {
-          let zoom = cgEvent.getDoubleValueField(zoomField)
-          let kind = cgEvent.getDoubleValueField(CGEventField(rawValue: 110)!)
-          DispatchQueue.main.async {
-            guard let owner = PanelController.magnifyTapOwner else { return }
-            // Kind 6 = scroll companion — ignore here; scroll monitors own pan.
-            // Only fractional non-scroll gestures are treated as magnify.
-            if abs(kind - 6.0) > 0.1, abs(zoom) > 0.00001, abs(zoom) < 1.0 {
-              owner.handleTrackpadMagnifyCaptured(
-                magnification: CGFloat(zoom),
-                mouseLocation: mouse
-              )
-            }
-          }
-          return Unmanaged.passUnretained(cgEvent)
-        }
-
-        if type == .scrollWheel {
-          let nsEvent = NSEvent(cgEvent: cgEvent)
-          let pointDY = cgEvent.getDoubleValueField(.scrollWheelEventPointDeltaAxis1)
-          let pointDX = cgEvent.getDoubleValueField(.scrollWheelEventPointDeltaAxis2)
-          let lineDY = cgEvent.getDoubleValueField(.scrollWheelEventDeltaAxis1)
-          let lineDX = cgEvent.getDoubleValueField(.scrollWheelEventDeltaAxis2)
-          let dx = nsEvent?.scrollingDeltaX ?? (abs(pointDX) > 0 ? CGFloat(pointDX) : CGFloat(lineDX))
-          let dy = nsEvent?.scrollingDeltaY ?? (abs(pointDY) > 0 ? CGFloat(pointDY) : CGFloat(lineDY))
-          DispatchQueue.main.async {
-            guard let owner = PanelController.magnifyTapOwner else { return }
-            _ = owner.handleTrackpadScrollCaptured(
-              deltaX: dx,
-              deltaY: dy,
-              mouseLocation: mouse
-            )
-          }
-          return Unmanaged.passUnretained(cgEvent)
-        }
-
-        return Unmanaged.passUnretained(cgEvent)
+        return PanelController.trackpadCGEventCallback(type, cgEvent)
       },
       userInfo: nil
     ) else {
@@ -822,8 +915,8 @@ final class PanelController {
       CFRunLoopAddSource(CFRunLoopGetMain(), magnifyRunLoopSource, .commonModes)
     }
     CGEvent.tapEnable(tap: tap, enable: true)
-    // Listen-only CGEvent taps need Input Monitoring; NSEvent global monitors need Accessibility.
-    // Finder stays key, so pinch arrives via the tap — request both grants when missing.
+    // CGEvent taps need Accessibility (and Input Monitoring for the HID tap).
+    // Finder stays key, so pinch is intercepted via the tap while the cursor is over the panel.
     let trusted = AXIsProcessTrusted()
     let listenAccess = CGPreflightListenEventAccess()
     if !listenAccess {
@@ -867,8 +960,8 @@ final class PanelController {
       guard self.imagePanel?.isVisible == true else { return }
       let trusted = AXIsProcessTrusted()
       let listenOK = CGPreflightListenEventAccess()
-      // Reinstall only once both grants that the tap needs are present.
-      if trusted && listenOK {
+      // Reinstall once Accessibility is granted (session tap); HID tap also needs Input Monitoring.
+      if trusted {
         timer.invalidate()
         self.accessibilityPollTimer = nil
         self.uninstallMagnifyEventTap()
@@ -881,7 +974,7 @@ final class PanelController {
     guard let tap = CGEvent.tapCreate(
       tap: .cgSessionEventTap,
       place: .headInsertEventTap,
-      options: .listenOnly,
+      options: .defaultTap,
       eventsOfInterest: mask,
       callback: { _, type, cgEvent, _ -> Unmanaged<CGEvent>? in
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
@@ -890,33 +983,7 @@ final class PanelController {
           }
           return Unmanaged.passUnretained(cgEvent)
         }
-        let mouse = NSEvent.mouseLocation
-        if type == .scrollWheel {
-          let dy = cgEvent.getDoubleValueField(.scrollWheelEventPointDeltaAxis1)
-          let dx = cgEvent.getDoubleValueField(.scrollWheelEventPointDeltaAxis2)
-          let lineDY = cgEvent.getDoubleValueField(.scrollWheelEventDeltaAxis1)
-          let useDY = abs(dy) > 0 ? dy : lineDY
-          let useDX = abs(dx) > 0 ? dx : cgEvent.getDoubleValueField(.scrollWheelEventDeltaAxis2)
-          DispatchQueue.main.async {
-            _ = PanelController.magnifyTapOwner?.handleTrackpadScrollCaptured(
-              deltaX: CGFloat(useDX),
-              deltaY: CGFloat(useDY),
-              mouseLocation: mouse
-            )
-          }
-        } else if type.rawValue == 29 {
-          let zoom = cgEvent.getDoubleValueField(CGEventField(rawValue: 113)!)
-          let kind = cgEvent.getDoubleValueField(CGEventField(rawValue: 110)!)
-          if abs(kind - 6.0) > 0.1, abs(zoom) > 0.00001, abs(zoom) < 1.0 {
-            DispatchQueue.main.async {
-              PanelController.magnifyTapOwner?.handleTrackpadMagnifyCaptured(
-                magnification: CGFloat(zoom),
-                mouseLocation: mouse
-              )
-            }
-          }
-        }
-        return Unmanaged.passUnretained(cgEvent)
+        return PanelController.trackpadCGEventCallback(type, cgEvent)
       },
       userInfo: nil
     ) else {
@@ -965,6 +1032,8 @@ final class PanelController {
       unregisterZoomHotKeyRefs()
       return
     }
+    // While preview is open and Finder is frontmost, claim keys so Finder
+    // (type-select / zoom icons) never receives them.
     let isFinder = NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.finder"
     if isFinder {
       registerZoomHotKeyRefs()
@@ -995,7 +1064,7 @@ final class PanelController {
   private func registerZoomHotKeyRefs() {
     guard zoomHotKeyRefs.isEmpty else { return }
 
-    // id 1 = zoom in, 2 = zoom out, 3 = reset
+    // id 1 = zoom in, 2 = zoom out, 3 = reset, 4 = B&W, 5 = crop
     let specs: [(UInt32, UInt32, UInt32)] = [
       (UInt32(kVK_ANSI_Equal), UInt32(cmdKey), 1),
       (UInt32(kVK_ANSI_Equal), UInt32(cmdKey) | UInt32(shiftKey), 1),
@@ -1003,6 +1072,8 @@ final class PanelController {
       (UInt32(kVK_ANSI_0), UInt32(cmdKey), 3),
       (UInt32(kVK_ANSI_KeypadPlus), UInt32(cmdKey), 1),
       (UInt32(kVK_ANSI_KeypadMinus), UInt32(cmdKey), 2),
+      (UInt32(kVK_ANSI_B), 0, 4),
+      (UInt32(kVK_ANSI_C), 0, 5),
     ]
 
     for (keyCode, modifiers, id) in specs {
@@ -1052,6 +1123,10 @@ final class PanelController {
     case 1: viewModel?.requestZoom(.zoomIn)
     case 2: viewModel?.requestZoom(.zoomOut)
     case 3: viewModel?.requestZoom(.reset)
+    case 4:
+      _ = handleEditToolKeyEvent(modifiers: [], charactersIgnoringModifiers: "b")
+    case 5:
+      _ = handleEditToolKeyEvent(modifiers: [], charactersIgnoringModifiers: "c")
     default: break
     }
   }
@@ -1119,10 +1194,11 @@ final class PanelController {
     guard shouldHandleGlobalNavigationKeys else { return }
 
     if keyDidPress(53) {
-      if viewModel?.cancelCropping() == true {
-        return
+      if viewModel?.isCropping == true {
+        viewModel?.cancelCropping()
+      } else {
+        dismiss(saving: false)
       }
-      dismiss(saving: false)
       return
     }
 
@@ -1131,12 +1207,17 @@ final class PanelController {
     let pressedReturn = keyDidPress(36)
     let pressedKeypadEnter = keyDidPress(76)
     if pressedReturn || pressedKeypadEnter {
-      dismiss(saving: true)
+      if viewModel?.isCropping == true {
+        viewModel?.applyDraftCrop()
+      } else {
+        dismiss(saving: true)
+      }
     }
   }
 
   private func pollArrowKeys() {
     guard imagePanel?.isVisible == true else { return }
+    guard viewModel?.isCropping != true else { return }
     // When Finder is frontmost, arrows move Finder selection — we must navigate Poosh
     // on the same press via key-state, not wait for AppleScript follow.
     guard shouldHandleGlobalNavigationKeys else { return }
