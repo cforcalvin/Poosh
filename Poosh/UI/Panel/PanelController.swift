@@ -199,10 +199,12 @@ final class PanelController {
   }
 
   private func handlePreviewKeyEvent(_ event: NSEvent) -> Bool {
-    // Esc: cancel crop, or dismiss without saving in normal mode.
+    // Esc: cancel crop / color-adjust, or dismiss without saving in normal mode.
     if event.keyCode == 53 {
       if viewModel?.isCropping == true {
         viewModel?.cancelCropping()
+      } else if viewModel?.isColorAdjusting == true {
+        viewModel?.cancelColorAdjusting()
       } else {
         dismiss(saving: false)
       }
@@ -222,10 +224,16 @@ final class PanelController {
       return true
     }
 
-    // Crop mode: Enter applies; all other keys (except Esc above) are swallowed.
+    // Crop / color-adjust: Enter applies; all other keys (except Esc above) are swallowed.
     if viewModel?.isCropping == true {
       if event.keyCode == 36 || event.keyCode == 76 {
         viewModel?.applyDraftCrop()
+      }
+      return true
+    }
+    if viewModel?.isColorAdjusting == true {
+      if event.keyCode == 36 || event.keyCode == 76 {
+        viewModel?.applyColorAdjust()
       }
       return true
     }
@@ -266,11 +274,11 @@ final class PanelController {
 
     switch charactersIgnoringModifiers?.lowercased() {
     case "c":
-      guard viewModel?.isCropping != true else { return true }
+      guard viewModel?.isCropping != true, viewModel?.isColorAdjusting != true else { return true }
       viewModel?.beginCropping()
       return true
     case "b":
-      guard viewModel?.isCropping != true else { return false }
+      guard viewModel?.isCropping != true, viewModel?.isColorAdjusting != true else { return false }
       viewModel?.toggleBlackAndWhite()
       return true
     default:
@@ -284,7 +292,8 @@ final class PanelController {
           !modifiers.contains(.option),
           !modifiers.contains(.control),
           viewModel?.contentMode == .editableImage,
-          viewModel?.isCropping != true else {
+          viewModel?.isCropping != true,
+          viewModel?.isColorAdjusting != true else {
       return false
     }
 
@@ -637,7 +646,8 @@ final class PanelController {
             imagePanel.isVisible,
             self.isTrackpadZoomContext(at: mouse),
             self.viewModel?.contentMode == .editableImage,
-            self.viewModel?.isCropping != true else {
+            self.viewModel?.isCropping != true,
+            self.viewModel?.isColorAdjusting != true else {
         return event
       }
       guard abs(dx) > 0.001 || abs(dy) > 0.001 else { return event }
@@ -733,6 +743,7 @@ final class PanelController {
     guard imagePanelFrameContains(mouseLocation) else { return false }
     guard viewModel?.contentMode == .editableImage else { return false }
     guard viewModel?.isCropping != true else { return false }
+    guard viewModel?.isColorAdjusting != true else { return false }
     return true
   }
 
@@ -850,7 +861,8 @@ final class PanelController {
           !mods.contains(.option),
           !mods.contains(.control),
           viewModel?.contentMode == .editableImage,
-          viewModel?.isCropping != true else {
+          viewModel?.isCropping != true,
+          viewModel?.isColorAdjusting != true else {
       return
     }
 
@@ -1196,6 +1208,8 @@ final class PanelController {
     if keyDidPress(53) {
       if viewModel?.isCropping == true {
         viewModel?.cancelCropping()
+      } else if viewModel?.isColorAdjusting == true {
+        viewModel?.cancelColorAdjusting()
       } else {
         dismiss(saving: false)
       }
@@ -1209,6 +1223,8 @@ final class PanelController {
     if pressedReturn || pressedKeypadEnter {
       if viewModel?.isCropping == true {
         viewModel?.applyDraftCrop()
+      } else if viewModel?.isColorAdjusting == true {
+        viewModel?.applyColorAdjust()
       } else {
         dismiss(saving: true)
       }
@@ -1218,6 +1234,7 @@ final class PanelController {
   private func pollArrowKeys() {
     guard imagePanel?.isVisible == true else { return }
     guard viewModel?.isCropping != true else { return }
+    guard viewModel?.isColorAdjusting != true else { return }
     // When Finder is frontmost, arrows move Finder selection — we must navigate Poosh
     // on the same press via key-state, not wait for AppleScript follow.
     guard shouldHandleGlobalNavigationKeys else { return }

@@ -36,9 +36,25 @@ struct EditRecipe: Codable, Equatable {
   /// Fine straighten angle in degrees (−45…45), applied after quarter turns.
   var straightenDegrees: Double
   var isBlackAndWhite: Bool
+  /// Center of the soft hue band in degrees (0…360). `nil` = no hue edit.
+  var hueCenterDegrees: Double?
+  /// Hue shift applied to the soft band around `hueCenterDegrees` (−180…180).
+  var hueShiftDegrees: Double
+  /// Saturation change for the soft band (−1…1). 0 = unchanged; −1 desaturates; +1 boosts.
+  var hueSaturationAmount: Double
   var sourcePath: String
   var fingerprint: String
   var bookmarkData: Data?
+
+  /// Soft hue-band half-width used by the processor (±degrees), with feathered edges.
+  static let hueBandHalfWidthDegrees: Double = 35
+  /// Inner full-strength core as a fraction of `hueBandHalfWidthDegrees` (rest is feather).
+  static let hueBandCoreFraction: Double = 0.35
+
+  var hasActiveHueShift: Bool {
+    guard hueCenterDegrees != nil else { return false }
+    return abs(hueShiftDegrees) > 0.5 || abs(hueSaturationAmount) > 0.01
+  }
 
   enum CodingKeys: String, CodingKey {
     case curvePoints
@@ -46,6 +62,9 @@ struct EditRecipe: Codable, Equatable {
     case cropRect
     case straightenDegrees
     case isBlackAndWhite
+    case hueCenterDegrees
+    case hueShiftDegrees
+    case hueSaturationAmount
     case sourcePath
     case fingerprint
     case bookmarkData
@@ -57,6 +76,9 @@ struct EditRecipe: Codable, Equatable {
     cropRect: CropRect?,
     straightenDegrees: Double = 0,
     isBlackAndWhite: Bool = false,
+    hueCenterDegrees: Double? = nil,
+    hueShiftDegrees: Double = 0,
+    hueSaturationAmount: Double = 0,
     sourcePath: String,
     fingerprint: String,
     bookmarkData: Data?
@@ -66,6 +88,9 @@ struct EditRecipe: Codable, Equatable {
     self.cropRect = cropRect
     self.straightenDegrees = straightenDegrees
     self.isBlackAndWhite = isBlackAndWhite
+    self.hueCenterDegrees = hueCenterDegrees
+    self.hueShiftDegrees = hueShiftDegrees
+    self.hueSaturationAmount = hueSaturationAmount
     self.sourcePath = sourcePath
     self.fingerprint = fingerprint
     self.bookmarkData = bookmarkData
@@ -78,6 +103,9 @@ struct EditRecipe: Codable, Equatable {
     cropRect = try c.decodeIfPresent(CropRect.self, forKey: .cropRect)
     straightenDegrees = try c.decodeIfPresent(Double.self, forKey: .straightenDegrees) ?? 0
     isBlackAndWhite = try c.decodeIfPresent(Bool.self, forKey: .isBlackAndWhite) ?? false
+    hueCenterDegrees = try c.decodeIfPresent(Double.self, forKey: .hueCenterDegrees)
+    hueShiftDegrees = try c.decodeIfPresent(Double.self, forKey: .hueShiftDegrees) ?? 0
+    hueSaturationAmount = try c.decodeIfPresent(Double.self, forKey: .hueSaturationAmount) ?? 0
     sourcePath = try c.decode(String.self, forKey: .sourcePath)
     fingerprint = try c.decode(String.self, forKey: .fingerprint)
     bookmarkData = try c.decodeIfPresent(Data.self, forKey: .bookmarkData)
@@ -90,6 +118,9 @@ struct EditRecipe: Codable, Equatable {
       cropRect: nil,
       straightenDegrees: 0,
       isBlackAndWhite: false,
+      hueCenterDegrees: nil,
+      hueShiftDegrees: 0,
+      hueSaturationAmount: 0,
       sourcePath: sourcePath,
       fingerprint: fingerprint,
       bookmarkData: bookmarkData

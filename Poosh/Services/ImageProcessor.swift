@@ -201,7 +201,10 @@ final class ImageProcessor: @unchecked Sendable {
     rotationQuarterTurns: Int = 0,
     cropRect: EditRecipe.CropRect? = nil,
     straightenDegrees: Double = 0,
-    isBlackAndWhite: Bool = false
+    isBlackAndWhite: Bool = false,
+    hueCenterDegrees: Double? = nil,
+    hueShiftDegrees: Double = 0,
+    hueSaturationAmount: Double = 0
   ) -> CGImage? {
     lock.lock()
     guard let sourceImage else {
@@ -233,7 +236,13 @@ final class ImageProcessor: @unchecked Sendable {
       curved = output
     }
 
-    let mono = isBlackAndWhite ? blackAndWhite(curved) : curved
+    let hued = shiftedHue(
+      curved,
+      centerDegrees: hueCenterDegrees,
+      shiftDegrees: hueShiftDegrees,
+      saturationAmount: hueSaturationAmount
+    )
+    let mono = isBlackAndWhite ? blackAndWhite(hued) : hued
     let rotatedImage = rotated(mono, quarterTurns: rotationQuarterTurns)
     let straightenedImage = straightened(rotatedImage, degrees: straightenDegrees)
     let finalImage = cropped(straightenedImage, cropRect: cropRect)
@@ -246,6 +255,9 @@ final class ImageProcessor: @unchecked Sendable {
     cropRect: EditRecipe.CropRect? = nil,
     straightenDegrees: Double = 0,
     isBlackAndWhite: Bool = false,
+    hueCenterDegrees: Double? = nil,
+    hueShiftDegrees: Double = 0,
+    hueSaturationAmount: Double = 0,
     to url: URL
   ) throws {
     guard let image = applyCurve(
@@ -253,12 +265,106 @@ final class ImageProcessor: @unchecked Sendable {
       rotationQuarterTurns: rotationQuarterTurns,
       cropRect: cropRect,
       straightenDegrees: straightenDegrees,
-      isBlackAndWhite: isBlackAndWhite
+      isBlackAndWhite: isBlackAndWhite,
+      hueCenterDegrees: hueCenterDegrees,
+      hueShiftDegrees: hueShiftDegrees,
+      hueSaturationAmount: hueSaturationAmount
     ) else {
       throw ImageProcessorError.renderFailed
     }
     try write(image: image, to: url)
   }
+
+  /// Soft ±35° band around `centerDegrees` with a feathered outer edge;
+  /// shifts hue and scales saturation by the band weight.
+  private func shiftedHue(
+    _ image: CIImage,
+    centerDegrees: Double?,
+    shiftDegrees: Double,
+    saturationAmount: Double
+  ) -> CIImage {
+    guard let center = centerDegrees else { return image }
+    guard abs(shiftDegrees) > 0.5 || abs(saturationAmount) > 0.01 else { return image }
+    guard let kernel = Self.hueShiftKernel else { return image }
+
+    let halfWidth = EditRecipe.hueBandHalfWidthDegrees
+    let coreWidth = halfWidth * EditRecipe.hueBandCoreFraction
+    let arguments: [Any] = [
+      image,
+      Float(center),
+      Float(shiftDegrees),
+      Float(saturationAmount),
+      Float(halfWidth),
+      Float(coreWidth),
+    ]
+    guard let output = kernel.apply(extent: image.extent, arguments: arguments) else {
+      return image
+    }
+    return output.cropped(to: image.extent)
+  }
+
+  private static let hueShiftKernel: CIColorKernel? = {
+    let source = """
+    kernel vec4 hueShiftBand(__sample s, float centerDeg, float shiftDeg, float satAmount, float halfWidthDeg, float coreWidthDeg) {
+      float r = s.r;
+      float g = s.g;
+      float b = s.b;
+      float maxc = max(r, max(g, b));
+      float minc = min(r, min(g, b));
+      float delta = maxc - minc;
+      float v = maxc;
+      float sat = (maxc > 1e-5) ? (delta / maxc) : 0.0;
+      if (sat < 0.02 || delta < 1e-5) {
+        return s;
+      }
+
+      float hue;
+      if (maxc == r) {
+        hue = 60.0 * mod((g - b) / delta, 6.0);
+      } else if (maxc == g) {
+        hue = 60.0 * ((b - r) / delta + 2.0);
+      } else {
+        hue = 60.0 * ((r - g) / delta + 4.0);
+      }
+      if (hue < 0.0) { hue += 360.0; }
+
+      float d = abs(hue - centerDeg);
+      d = min(d, 360.0 - d);
+      if (d >= halfWidthDeg) {
+        return s;
+      }
+
+      float weight;
+      if (d <= coreWidthDeg) {
+        weight = 1.0;
+      } else {
+        float t = 1.0 - ((d - coreWidthDeg) / max(halfWidthDeg - coreWidthDeg, 0.001));
+        t = clamp(t, 0.0, 1.0);
+        weight = t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+      }
+
+      float newHue = hue + shiftDeg * weight;
+      newHue = mod(newHue, 360.0);
+      if (newHue < 0.0) { newHue += 360.0; }
+
+      float newSat = clamp(sat * (1.0 + satAmount * weight), 0.0, 1.0);
+
+      float c = v * newSat;
+      float x = c * (1.0 - abs(mod(newHue / 60.0, 2.0) - 1.0));
+      float m = v - c;
+      float rr, gg, bb;
+      if (newHue < 60.0) { rr = c; gg = x; bb = 0.0; }
+      else if (newHue < 120.0) { rr = x; gg = c; bb = 0.0; }
+      else if (newHue < 180.0) { rr = 0.0; gg = c; bb = x; }
+      else if (newHue < 240.0) { rr = 0.0; gg = x; bb = c; }
+      else if (newHue < 300.0) { rr = x; gg = 0.0; bb = c; }
+      else { rr = c; gg = 0.0; bb = x; }
+
+      return vec4(rr + m, gg + m, bb + m, s.a);
+    }
+    """
+    return CIColorKernel(source: source)
+  }()
 
   private func blackAndWhite(_ image: CIImage) -> CIImage {
     guard let filter = CIFilter(name: "CIColorControls") else { return image }

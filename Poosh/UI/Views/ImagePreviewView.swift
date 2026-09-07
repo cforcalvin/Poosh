@@ -22,7 +22,7 @@ struct ImagePreviewView: View {
             .frame(width: geometry.size.width, height: geometry.size.height)
             .contentShape(Rectangle())
             .onTapGesture(count: 2) {
-              guard !viewModel.isCropping else { return }
+              guard !viewModel.isCropping, !viewModel.isColorAdjusting else { return }
               withAnimation(.easeInOut(duration: 0.2)) {
                 viewModel.resetImageZoom()
               }
@@ -35,6 +35,14 @@ struct ImagePreviewView: View {
                   containerSize: geometry.size,
                   crop: $viewModel.draftCrop
                 )
+              } else if viewModel.isColorAdjusting {
+                ColorPickOverlayView(
+                  imageSize: fittedImageSize(image: image, in: geometry.size),
+                  containerSize: geometry.size,
+                  isEyedropping: viewModel.isEyedropping
+                ) { normalized in
+                  viewModel.sampleHue(atNormalized: normalized)
+                }
               }
             }
             .onAppear {
@@ -52,6 +60,19 @@ struct ImagePreviewView: View {
     .onChange(of: resetID) { _, _ in
       viewModel.resetImageZoom()
     }
+    .onChange(of: viewModel.isEyedropping) { _, eyedropping in
+      EyedropperCursor.setActive(eyedropping)
+    }
+    .onChange(of: viewModel.isColorAdjusting) { _, adjusting in
+      if !adjusting {
+        EyedropperCursor.setActive(false)
+      } else if viewModel.isEyedropping {
+        EyedropperCursor.setActive(true)
+      }
+    }
+    .onDisappear {
+      EyedropperCursor.setActive(false)
+    }
   }
 
   private func fittedImageSize(image: CGImage, in container: CGSize) -> CGSize {
@@ -60,6 +81,108 @@ struct ImagePreviewView: View {
     guard iw > 0, ih > 0, container.width > 0, container.height > 0 else { return container }
     let scale = min(container.width / iw, container.height / ih)
     return CGSize(width: iw * scale, height: ih * scale)
+  }
+}
+
+/// Click-to-sample overlay for color adjust. Clicking outside the fitted image is ignored.
+private struct ColorPickOverlayView: View {
+  let imageSize: CGSize
+  let containerSize: CGSize
+  let isEyedropping: Bool
+  let onPick: (CGPoint) -> Void
+
+  private var imageOrigin: CGPoint {
+    CGPoint(
+      x: (containerSize.width - imageSize.width) / 2,
+      y: (containerSize.height - imageSize.height) / 2
+    )
+  }
+
+  private var imageFrame: CGRect {
+    CGRect(origin: imageOrigin, size: imageSize)
+  }
+
+  var body: some View {
+    Color.clear
+      .contentShape(Rectangle())
+      .gesture(
+        DragGesture(minimumDistance: 0)
+          .onEnded { value in
+            let loc = value.location
+            guard imageFrame.contains(loc), imageSize.width > 0, imageSize.height > 0 else { return }
+            let nx = (loc.x - imageOrigin.x) / imageSize.width
+            let ny = (loc.y - imageOrigin.y) / imageSize.height
+            onPick(CGPoint(x: min(max(nx, 0), 1), y: min(max(ny, 0), 1)))
+          }
+      )
+      .onHover { hovering in
+        if hovering, isEyedropping {
+          EyedropperCursor.setActive(true)
+        } else if !isEyedropping {
+          EyedropperCursor.setActive(false)
+        }
+      }
+  }
+}
+
+/// Push/pop an eyedropper + crosshair cursor while color picking.
+enum EyedropperCursor {
+  private static var isPushed = false
+  private static var cached: NSCursor?
+
+  static func setActive(_ active: Bool) {
+    DispatchQueue.main.async {
+      if active {
+        guard !isPushed else {
+          cursor().set()
+          return
+        }
+        cursor().push()
+        isPushed = true
+      } else if isPushed {
+        NSCursor.pop()
+        isPushed = false
+      }
+    }
+  }
+
+  private static func cursor() -> NSCursor {
+    if let cached { return cached }
+    let size = NSSize(width: 24, height: 24)
+    let image = NSImage(size: size, flipped: false) { rect in
+      // Crosshair
+      NSColor.white.setStroke()
+      let path = NSBezierPath()
+      path.lineWidth = 1.5
+      path.move(to: NSPoint(x: rect.midX, y: 2))
+      path.line(to: NSPoint(x: rect.midX, y: rect.maxY - 2))
+      path.move(to: NSPoint(x: 2, y: rect.midY))
+      path.line(to: NSPoint(x: rect.maxX - 2, y: rect.midY))
+      path.stroke()
+      NSColor.black.withAlphaComponent(0.55).setStroke()
+      let outline = NSBezierPath()
+      outline.lineWidth = 0.75
+      outline.move(to: NSPoint(x: rect.midX, y: 2))
+      outline.line(to: NSPoint(x: rect.midX, y: rect.maxY - 2))
+      outline.move(to: NSPoint(x: 2, y: rect.midY))
+      outline.line(to: NSPoint(x: rect.maxX - 2, y: rect.midY))
+      outline.stroke()
+
+      // Eyedropper glyph (SF Symbol) in the lower-right.
+      if let symbol = NSImage(
+        systemSymbolName: "eyedropper",
+        accessibilityDescription: nil
+      ) {
+        let config = NSImage.SymbolConfiguration(pointSize: 11, weight: .semibold)
+        let configured = symbol.withSymbolConfiguration(config) ?? symbol
+        let drawRect = NSRect(x: rect.maxX - 13, y: 1, width: 12, height: 12)
+        configured.draw(in: drawRect, from: .zero, operation: .sourceOver, fraction: 1)
+      }
+      return true
+    }
+    let made = NSCursor(image: image, hotSpot: NSPoint(x: size.width / 2, y: size.height / 2))
+    cached = made
+    return made
   }
 }
 

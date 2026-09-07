@@ -29,6 +29,16 @@ final class PreviewViewModel: ObservableObject {
   @Published private(set) var isBlackAndWhite = false
   /// Fine straighten in degrees (−45…45), edited during crop.
   @Published private(set) var straightenDegrees: Double = 0
+  /// Color-adjust session (eyedropper + hue band shift).
+  @Published var isColorAdjusting = false
+  /// True while waiting for the user to click a color on the image.
+  @Published private(set) var isEyedropping = false
+  /// Center of the soft hue band (0…360). `nil` until sampled / loaded.
+  @Published private(set) var hueCenterDegrees: Double?
+  /// Live hue shift for the soft band (−180…180).
+  @Published private(set) var hueShiftDegrees: Double = 0
+  /// Saturation change for the soft band (−1…1).
+  @Published private(set) var hueSaturationAmount: Double = 0
   /// Live zoom/pan for the editable image preview (Quick Look–style).
   @Published private(set) var imageScale: CGFloat = 1
   @Published private(set) var imageOffset: CGSize = .zero
@@ -52,8 +62,15 @@ final class PreviewViewModel: ObservableObject {
   private var baselineCrop: EditRecipe.CropRect?
   private var baselineBlackAndWhite = false
   private var baselineStraightenDegrees: Double = 0
+  private var baselineHueCenterDegrees: Double?
+  private var baselineHueShiftDegrees: Double = 0
+  private var baselineHueSaturationAmount: Double = 0
   /// Straighten angle when the current crop session started (restored on Cancel).
   private var straightenDegreesAtCropStart: Double = 0
+  /// Hue state when the current color-adjust session started (restored on Cancel).
+  private var hueCenterAtColorAdjustStart: Double?
+  private var hueShiftAtColorAdjustStart: Double = 0
+  private var hueSaturationAtColorAdjustStart: Double = 0
   private var cancellables = Set<AnyCancellable>()
   private var processingGeneration = 0
   private var loadGeneration = 0
@@ -70,6 +87,15 @@ final class PreviewViewModel: ObservableObject {
       || !Self.cropsEqual(cropRect, baselineCrop)
       || isBlackAndWhite != baselineBlackAndWhite
       || abs(straightenDegrees - baselineStraightenDegrees) > 0.01
+      || !Self.huesEqual(hueCenterDegrees, baselineHueCenterDegrees)
+      || abs(hueShiftDegrees - baselineHueShiftDegrees) > 0.5
+      || abs(hueSaturationAmount - baselineHueSaturationAmount) > 0.01
+  }
+
+  /// Soft band is active when a center is set and hue or sat differs from identity.
+  private var hasHueEdit: Bool {
+    guard hueCenterDegrees != nil else { return false }
+    return abs(hueShiftDegrees) > 0.5 || abs(hueSaturationAmount) > 0.01
   }
 
   private var hasCurveChanges: Bool {
@@ -198,10 +224,18 @@ final class PreviewViewModel: ObservableObject {
     cropRect = nil
     baselineCrop = nil
     isCropping = false
+    isColorAdjusting = false
+    isEyedropping = false
     isBlackAndWhite = false
     baselineBlackAndWhite = false
     straightenDegrees = 0
     baselineStraightenDegrees = 0
+    hueCenterDegrees = nil
+    baselineHueCenterDegrees = nil
+    hueShiftDegrees = 0
+    baselineHueShiftDegrees = 0
+    hueSaturationAmount = 0
+    baselineHueSaturationAmount = 0
     displayAlreadyHasRecipeEdits = false
     resetImageZoom()
 
@@ -286,7 +320,10 @@ final class PreviewViewModel: ObservableObject {
         self.cropRect,
         self.displayAlreadyHasRecipeEdits,
         self.straightenDegrees,
-        self.isBlackAndWhite
+        self.isBlackAndWhite,
+        self.hueCenterDegrees,
+        self.hueShiftDegrees,
+        self.hueSaturationAmount
       )
     }
     let turns = snapshot.1
@@ -295,12 +332,16 @@ final class PreviewViewModel: ObservableObject {
     let alreadyEdited = snapshot.3
     let straighten = snapshot.4
     let mono = snapshot.5
+    let hueCenter = snapshot.6
+    let hueShift = snapshot.7
+    let hueSat = snapshot.8
     let needsEditPass =
       turns != 0
       || !Self.isIdentityCurve(curvePoints)
       || (crop != nil && !(crop?.isIdentity ?? true))
       || mono
       || abs(straighten) > 0.01
+      || (hueCenter != nil && (abs(hueShift) > 0.5 || abs(hueSat) > 0.01))
     let processor = self.processor
 
     if display == nil {
@@ -329,7 +370,10 @@ final class PreviewViewModel: ObservableObject {
           rotationQuarterTurns: turns,
           cropRect: crop,
           straightenDegrees: straighten,
-          isBlackAndWhite: mono
+          isBlackAndWhite: mono,
+          hueCenterDegrees: hueCenter,
+          hueShiftDegrees: hueShift,
+          hueSaturationAmount: hueSat
         )
       }
       self.scheduleIdleUpgrade(for: source, master: master, generation: generation)
@@ -374,6 +418,7 @@ final class PreviewViewModel: ObservableObject {
           || (self.cropRect != nil && !(self.cropRect?.isIdentity ?? true))
           || self.isBlackAndWhite
           || abs(self.straightenDegrees) > 0.01
+          || self.hasHueEdit
         if needsEditPass {
           // Processor already holds the sharper source — reprocess into display
           // without flashing the unedited master.
@@ -399,7 +444,10 @@ final class PreviewViewModel: ObservableObject {
       rotationQuarterTurns: rotationQuarterTurns,
       cropRect: cropRect,
       straightenDegrees: straightenDegrees,
-      isBlackAndWhite: isBlackAndWhite
+      isBlackAndWhite: isBlackAndWhite,
+      hueCenterDegrees: hueCenterDegrees,
+      hueShiftDegrees: hueShiftDegrees,
+      hueSaturationAmount: hueSaturationAmount
     ) else {
       return false
     }
@@ -416,6 +464,9 @@ final class PreviewViewModel: ObservableObject {
     let crop = cropRect
     let straighten = straightenDegrees
     let mono = isBlackAndWhite
+    let hueCenter = hueCenterDegrees
+    let hueShift = hueShiftDegrees
+    let hueSat = hueSaturationAmount
     let generation = loadGeneration
     let processor = self.processor
     Task.detached(priority: .userInitiated) {
@@ -425,7 +476,10 @@ final class PreviewViewModel: ObservableObject {
         rotationQuarterTurns: turns,
         cropRect: crop,
         straightenDegrees: straighten,
-        isBlackAndWhite: mono
+        isBlackAndWhite: mono,
+        hueCenterDegrees: hueCenter,
+        hueShiftDegrees: hueShift,
+        hueSaturationAmount: hueSat
       )
       await MainActor.run {
         guard self.loadGeneration == generation else { return }
@@ -442,6 +496,7 @@ final class PreviewViewModel: ObservableObject {
       || (cropRect != nil && !(cropRect?.isIdentity ?? true))
       || isBlackAndWhite
       || abs(straightenDegrees) > 0.01
+      || hasHueEdit
   }
 
   private static func requestUbiquitousDownloadIfNeeded(for url: URL) {
@@ -473,23 +528,23 @@ final class PreviewViewModel: ObservableObject {
   }
 
   func resetCurve() {
-    guard contentMode == .editableImage else { return }
+    guard contentMode == .editableImage, !isCropping, !isColorAdjusting else { return }
     toneCurve.reset()
     reprocessCurrentEdits()
   }
 
   func rotateLeft() {
-    guard contentMode == .editableImage else { return }
+    guard contentMode == .editableImage, !isCropping, !isColorAdjusting else { return }
     applyRotationDelta(-1)
   }
 
   func rotateRight() {
-    guard contentMode == .editableImage else { return }
+    guard contentMode == .editableImage, !isCropping, !isColorAdjusting else { return }
     applyRotationDelta(1)
   }
 
   func toggleBlackAndWhite() {
-    guard contentMode == .editableImage, !isCropping else { return }
+    guard contentMode == .editableImage, !isCropping, !isColorAdjusting else { return }
     isBlackAndWhite.toggle()
     reprocessCurrentEdits()
   }
@@ -505,7 +560,8 @@ final class PreviewViewModel: ObservableObject {
   }
 
   func beginCropping() {
-    guard contentMode == .editableImage else { return }
+    guard contentMode == .editableImage, !isColorAdjusting else { return }
+    _ = cancelColorAdjusting()
     straightenDegreesAtCropStart = straightenDegrees
     if let existing = cropRect, !existing.isIdentity {
       draftCrop = existing.clamped()
@@ -544,8 +600,76 @@ final class PreviewViewModel: ObservableObject {
     onNeedsLayout?()
   }
 
-  func requestZoom(_ command: PreviewZoomCommand) {
+  func beginColorAdjusting() {
     guard contentMode == .editableImage, !isCropping else { return }
+    if isColorAdjusting {
+      // Re-enter pick mode to sample a new center.
+      isEyedropping = true
+      return
+    }
+    hueCenterAtColorAdjustStart = hueCenterDegrees
+    hueShiftAtColorAdjustStart = hueShiftDegrees
+    hueSaturationAtColorAdjustStart = hueSaturationAmount
+    isColorAdjusting = true
+    isEyedropping = hueCenterDegrees == nil
+    resetImageZoom()
+  }
+
+  @discardableResult
+  func cancelColorAdjusting() -> Bool {
+    guard isColorAdjusting else { return false }
+    isColorAdjusting = false
+    isEyedropping = false
+    hueCenterDegrees = hueCenterAtColorAdjustStart
+    hueShiftDegrees = hueShiftAtColorAdjustStart
+    hueSaturationAmount = hueSaturationAtColorAdjustStart
+    reprocessCurrentEdits()
+    return true
+  }
+
+  func applyColorAdjust() {
+    guard isColorAdjusting else { return }
+    isColorAdjusting = false
+    isEyedropping = false
+    // Keep live values; clear center if both hue and sat are identity.
+    if abs(hueShiftDegrees) <= 0.5, abs(hueSaturationAmount) <= 0.01 {
+      hueCenterDegrees = nil
+      hueShiftDegrees = 0
+      hueSaturationAmount = 0
+    }
+    reprocessCurrentEdits()
+  }
+
+  func setHueShiftDegrees(_ degrees: Double) {
+    guard contentMode == .editableImage, isColorAdjusting, hueCenterDegrees != nil else { return }
+    let next = min(max(degrees, -180), 180)
+    guard abs(next - hueShiftDegrees) > 0.001 else { return }
+    hueShiftDegrees = next
+    reprocessCurrentEdits()
+  }
+
+  func setHueSaturationAmount(_ amount: Double) {
+    guard contentMode == .editableImage, isColorAdjusting, hueCenterDegrees != nil else { return }
+    let next = min(max(amount, -1), 1)
+    guard abs(next - hueSaturationAmount) > 0.001 else { return }
+    hueSaturationAmount = next
+    reprocessCurrentEdits()
+  }
+
+  /// Sample hue from `processedImage` at normalized top-left image coords (0…1).
+  func sampleHue(atNormalized point: CGPoint) {
+    guard contentMode == .editableImage, isColorAdjusting else { return }
+    guard let image = processedImage else { return }
+    guard let hue = Self.hueDegrees(in: image, atNormalized: point) else { return }
+    hueCenterDegrees = hue
+    hueShiftDegrees = 0
+    hueSaturationAmount = 0
+    isEyedropping = false
+    reprocessCurrentEdits()
+  }
+
+  func requestZoom(_ command: PreviewZoomCommand) {
+    guard contentMode == .editableImage, !isCropping, !isColorAdjusting else { return }
     switch command {
     case .zoomIn:
       setImageScale(min(imageScale * imageZoomStep, maxImageScale))
@@ -563,7 +687,7 @@ final class PreviewViewModel: ObservableObject {
 
   /// Incremental magnify (NSEvent type `.magnify` / true pinch). `delta` is a small fraction.
   func applyPinchMagnification(_ delta: CGFloat) {
-    guard contentMode == .editableImage, !isCropping else { return }
+    guard contentMode == .editableImage, !isCropping, !isColorAdjusting else { return }
     guard abs(delta) > 0.0001 else { return }
     let next = min(max(imageScale * (1 + delta), minImageScale), maxImageScale)
     if next <= 1.01 {
@@ -574,7 +698,7 @@ final class PreviewViewModel: ObservableObject {
   }
 
   func applyTrackpadPan(deltaX: CGFloat, deltaY: CGFloat) {
-    guard contentMode == .editableImage, !isCropping else { return }
+    guard contentMode == .editableImage, !isCropping, !isColorAdjusting else { return }
     guard imageScale > 1.01 else { return }
     let next = CGSize(
       width: imageOffset.width + deltaX,
@@ -643,15 +767,22 @@ final class PreviewViewModel: ObservableObject {
     let crop = cropRect
     let straighten = straightenDegrees
     let mono = isBlackAndWhite
+    let hueCenter = hueCenterDegrees
+    let hueShift = hueShiftDegrees
+    let hueSat = hueSaturationAmount
     let lut = ToneCurve(points: points).generateLUT()
     let existing = libraryEntry
 
+    let activeHue = hueCenter != nil && (abs(hueShift) > 0.5 || abs(hueSat) > 0.01)
     let recipe = EditRecipe(
       curvePoints: points.map { EditRecipe.Point(x: $0.x, y: $0.y) },
       rotationQuarterTurns: turns,
       cropRect: crop,
       straightenDegrees: straighten,
       isBlackAndWhite: mono,
+      hueCenterDegrees: activeHue ? hueCenter : nil,
+      hueShiftDegrees: activeHue ? hueShift : 0,
+      hueSaturationAmount: activeHue ? hueSat : 0,
       sourcePath: finderURL.path,
       fingerprint: existing?.recipe.fingerprint ?? "",
       bookmarkData: existing?.recipe.bookmarkData
@@ -672,6 +803,9 @@ final class PreviewViewModel: ObservableObject {
         cropRect: crop,
         straightenDegrees: straighten,
         isBlackAndWhite: mono,
+        hueCenterDegrees: recipe.hueCenterDegrees,
+        hueShiftDegrees: recipe.hueShiftDegrees,
+        hueSaturationAmount: recipe.hueSaturationAmount,
         to: finderURL
       )
     }.value
@@ -685,6 +819,12 @@ final class PreviewViewModel: ObservableObject {
     baselineCrop = crop
     baselineStraightenDegrees = straighten
     baselineBlackAndWhite = mono
+    baselineHueCenterDegrees = recipe.hueCenterDegrees
+    baselineHueShiftDegrees = recipe.hueShiftDegrees
+    baselineHueSaturationAmount = recipe.hueSaturationAmount
+    hueCenterDegrees = recipe.hueCenterDegrees
+    hueShiftDegrees = recipe.hueShiftDegrees
+    hueSaturationAmount = recipe.hueSaturationAmount
   }
 
   private func applyLibraryStateIfAvailable(for url: URL) {
@@ -721,10 +861,17 @@ final class PreviewViewModel: ObservableObject {
     baselineStraightenDegrees = straightenDegrees
     isBlackAndWhite = entry.recipe.isBlackAndWhite
     baselineBlackAndWhite = isBlackAndWhite
+    hueCenterDegrees = entry.recipe.hueCenterDegrees
+    baselineHueCenterDegrees = hueCenterDegrees
+    hueShiftDegrees = entry.recipe.hueShiftDegrees
+    baselineHueShiftDegrees = hueShiftDegrees
+    hueSaturationAmount = entry.recipe.hueSaturationAmount
+    baselineHueSaturationAmount = hueSaturationAmount
     updateLayoutSizeFromMaster(masterURL)
   }
 
   private func applyRotationDelta(_ delta: Int) {
+    guard !isCropping, !isColorAdjusting else { return }
     rotationQuarterTurns = ImageProcessor.normalizedQuarterTurns(rotationQuarterTurns + delta)
     updateLayoutSizeFromMaster(masterURL)
     reprocessCurrentEdits()
@@ -737,7 +884,10 @@ final class PreviewViewModel: ObservableObject {
       rotationQuarterTurns: rotationQuarterTurns,
       cropRect: isCropping ? nil : cropRect,
       straightenDegrees: straightenDegrees,
-      isBlackAndWhite: isBlackAndWhite
+      isBlackAndWhite: isBlackAndWhite,
+      hueCenterDegrees: hueCenterDegrees,
+      hueShiftDegrees: hueShiftDegrees,
+      hueSaturationAmount: hueSaturationAmount
     )
   }
 
@@ -748,7 +898,10 @@ final class PreviewViewModel: ObservableObject {
       rotationQuarterTurns: rotationQuarterTurns,
       cropRect: nil,
       straightenDegrees: straightenDegrees,
-      isBlackAndWhite: isBlackAndWhite
+      isBlackAndWhite: isBlackAndWhite,
+      hueCenterDegrees: hueCenterDegrees,
+      hueShiftDegrees: hueShiftDegrees,
+      hueSaturationAmount: hueSaturationAmount
     )
   }
 
@@ -758,6 +911,7 @@ final class PreviewViewModel: ObservableObject {
       .receive(on: DispatchQueue.main)
       .sink { [weak self] points in
         guard let self, !self.suppressCurveBinding else { return }
+        guard !self.isColorAdjusting else { return }
         // Live preview uses whatever preview pixels are loaded — never kick a full-res
         // decode mid-drag (that was saturating ImageIO and killing arrow-key speed).
         self.processEdits(
@@ -765,7 +919,10 @@ final class PreviewViewModel: ObservableObject {
           rotationQuarterTurns: self.rotationQuarterTurns,
           cropRect: self.isCropping ? nil : self.cropRect,
           straightenDegrees: self.straightenDegrees,
-          isBlackAndWhite: self.isBlackAndWhite
+          isBlackAndWhite: self.isBlackAndWhite,
+          hueCenterDegrees: self.hueCenterDegrees,
+          hueShiftDegrees: self.hueShiftDegrees,
+          hueSaturationAmount: self.hueSaturationAmount
         )
       }
       .store(in: &cancellables)
@@ -776,7 +933,10 @@ final class PreviewViewModel: ObservableObject {
     rotationQuarterTurns: Int,
     cropRect: EditRecipe.CropRect?,
     straightenDegrees: Double,
-    isBlackAndWhite: Bool
+    isBlackAndWhite: Bool,
+    hueCenterDegrees: Double?,
+    hueShiftDegrees: Double,
+    hueSaturationAmount: Double
   ) {
     guard contentMode == .editableImage else { return }
     processingGeneration += 1
@@ -786,6 +946,9 @@ final class PreviewViewModel: ObservableObject {
     let crop = cropRect
     let straighten = straightenDegrees
     let mono = isBlackAndWhite
+    let hueCenter = hueCenterDegrees
+    let hueShift = hueShiftDegrees
+    let hueSat = hueSaturationAmount
     let processor = self.processor
 
     Task.detached(priority: .userInitiated) {
@@ -794,7 +957,10 @@ final class PreviewViewModel: ObservableObject {
         rotationQuarterTurns: turns,
         cropRect: crop,
         straightenDegrees: straighten,
-        isBlackAndWhite: mono
+        isBlackAndWhite: mono,
+        hueCenterDegrees: hueCenter,
+        hueShiftDegrees: hueShift,
+        hueSaturationAmount: hueSat
       )
       await MainActor.run {
         guard self.processingGeneration == generation else { return }
@@ -861,5 +1027,76 @@ final class PreviewViewModel: ObservableObject {
         && abs(a.width - b.width) < 0.002
         && abs(a.height - b.height) < 0.002
     }
+  }
+
+  private static func huesEqual(_ a: Double?, _ b: Double?) -> Bool {
+    switch (a, b) {
+    case (nil, nil):
+      return true
+    case (nil, _), (_, nil):
+      return false
+    case (let a?, let b?):
+      var d = abs(a - b)
+      d = min(d, 360 - d)
+      return d < 0.5
+    }
+  }
+
+  /// Sample hue (0…360) at normalized top-left coords in image pixel space.
+  static func hueDegrees(in image: CGImage, atNormalized point: CGPoint) -> Double? {
+    let w = image.width
+    let h = image.height
+    guard w > 0, h > 0 else { return nil }
+    let x = min(max(Int(point.x * CGFloat(w)), 0), w - 1)
+    let y = min(max(Int(point.y * CGFloat(h)), 0), h - 1)
+
+    guard let data = image.dataProvider?.data,
+          let ptr = CFDataGetBytePtr(data) else {
+      return nil
+    }
+    let bpp = image.bitsPerPixel / 8
+    let bpr = image.bytesPerRow
+    guard bpp >= 3 else { return nil }
+    let offset = y * bpr + x * bpp
+    let count = CFDataGetLength(data)
+    guard offset + 2 < count else { return nil }
+
+    // Prefer RGB order; handle BGRA bitmap info.
+    let alphaInfo = CGImageAlphaInfo(rawValue: image.bitmapInfo.rawValue & CGBitmapInfo.alphaInfoMask.rawValue)
+    let byteOrder = CGBitmapInfo(rawValue: image.bitmapInfo.rawValue & CGBitmapInfo.byteOrderMask.rawValue)
+    let isBGRA =
+      (byteOrder == .byteOrder32Little || byteOrder == .byteOrder16Little)
+      && (alphaInfo == .premultipliedFirst || alphaInfo == .first || alphaInfo == .noneSkipFirst)
+
+    let r: Double
+    let g: Double
+    let b: Double
+    if isBGRA {
+      b = Double(ptr[offset]) / 255
+      g = Double(ptr[offset + 1]) / 255
+      r = Double(ptr[offset + 2]) / 255
+    } else {
+      r = Double(ptr[offset]) / 255
+      g = Double(ptr[offset + 1]) / 255
+      b = Double(ptr[offset + 2]) / 255
+    }
+    return rgbToHueDegrees(r: r, g: g, b: b)
+  }
+
+  private static func rgbToHueDegrees(r: Double, g: Double, b: Double) -> Double? {
+    let maxc = max(r, max(g, b))
+    let minc = min(r, min(g, b))
+    let delta = maxc - minc
+    guard delta > 1e-5, maxc > 1e-5 else { return nil }
+    var hue: Double
+    if maxc == r {
+      hue = 60 * (((g - b) / delta).truncatingRemainder(dividingBy: 6))
+    } else if maxc == g {
+      hue = 60 * ((b - r) / delta + 2)
+    } else {
+      hue = 60 * ((r - g) / delta + 4)
+    }
+    if hue < 0 { hue += 360 }
+    return hue
   }
 }

@@ -1,6 +1,6 @@
 # Poosh
 
-A lightweight macOS image previewer for Finder — Quick Look–style browsing with tone curve adjustments, crop, straighten, black & white, rotation, and trackpad zoom.
+A lightweight macOS image previewer for Finder — Quick Look–style browsing with tone curve, selective hue/saturation, crop, straighten, black & white, rotation, and trackpad zoom.
 
 <img width="1268" height="736" alt="Screenshot 2026-07-12 at 5 32 02 AM" src="https://github.com/user-attachments/assets/dcfd4521-8e1d-4261-b0d0-89ef7f3cbce7" />
 <img width="1277" height="742" alt="Screenshot 2026-07-12 at 5 33 07 AM" src="https://github.com/user-attachments/assets/5d89fd3c-4aa5-42ab-bdb1-08035e5d6fd2" />
@@ -13,10 +13,17 @@ A lightweight macOS image previewer for Finder — Quick Look–style browsing w
 - **Pinch to zoom** and two-finger pan while zoomed (image stays edged to the viewport)
 - **⌘+/−/0** or double-tap to zoom in, out, or reset
 - Freeform **crop** with edge + corner handles, and fine **straighten** while cropping
+- **Color adjust** (eyedropper) — pick a hue on the image, then shift hue and saturation in a soft band
 - **Black & white** toggle (**B**); **crop** with **C**
 - Fast tone curve editing in a floating HUD
 - Rotate left / right before saving
 - Supports JPEG, PNG, HEIC, and WebP
+
+## What's new in 1.5.0
+
+- **Eyedropper color adjust** — pick a color on the image; shift **hue** and **saturation** in a feathered ±35° band
+- Crop-like session: top-bar spectrum + sliders, **Enter** applies, **Esc** cancels
+- Eyedropper + crosshair cursor while picking
 
 ## What's new in 1.4.0
 
@@ -80,8 +87,8 @@ The script produces a signed, notarized, stapled `.app` (and zip) under `dist/`.
 1. Launch Poosh (menu bar / accessory app).
 2. Select an image in Finder.
 3. Press **Space** (or **⌘⇧Space**) to preview.
-4. Pinch to zoom, pan while zoomed, adjust the tone curve, crop (**C**), straighten, black & white (**B**), or rotate as needed.
-5. Press **Space** or **Enter** to save and close, or **Esc** to discard. While cropping, **Enter** applies and **Esc** cancels.
+4. Pinch to zoom, pan while zoomed, adjust the tone curve, eyedropper color adjust, crop (**C**), straighten, black & white (**B**), or rotate as needed.
+5. Press **Space** or **Enter** to save and close, or **Esc** to discard. While cropping or color-adjusting, **Enter** applies and **Esc** cancels.
 
 While Finder is frontmost, Space is claimed by Poosh so Quick Look does not open. In other apps, Space behaves normally.
 
