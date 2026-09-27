@@ -779,13 +779,17 @@ final class PanelController {
     magnifyTapOwner?.imagePanelFrameContains(point) ?? false
   }
 
-  private static func handleMagnifyFromCGEvent(_ cgEvent: CGEvent, magnification: CGFloat) {
-    DispatchQueue.main.async {
-      let mouse = NSEvent.mouseLocation
+  private static func handleMagnifyFromCGEvent(magnification: CGFloat, mouseLocation: NSPoint) {
+    let apply: () -> Void = {
       magnifyTapOwner?.handleTrackpadMagnifyCaptured(
         magnification: magnification,
-        mouseLocation: mouse
+        mouseLocation: mouseLocation
       )
+    }
+    if Thread.isMainThread {
+      apply()
+    } else {
+      DispatchQueue.main.async(execute: apply)
     }
   }
 
@@ -812,25 +816,30 @@ final class PanelController {
     _ type: CGEventType,
     _ cgEvent: CGEvent
   ) -> Unmanaged<CGEvent>? {
-    let mouse = NSPoint(x: cgEvent.location.x, y: cgEvent.location.y)
+    // Gesture packets often have a zero or top-left location. The live cursor is
+    // in the same bottom-left space as the panel frame (click-outside uses this).
+    let mouse = NSEvent.mouseLocation
     let overPanel = imagePanelContainsMouse(mouse)
 
-    if type.rawValue == 30 {
+    let zoomField = CGEventField(rawValue: 113)!
+    let kindField = CGEventField(rawValue: 110)!
+    // 8 = trackpad pinch. 6 = scroll companion, which must not zoom.
+    let kind = cgEvent.getIntegerValueField(kindField)
+    let zoom = CGFloat(cgEvent.getDoubleValueField(zoomField))
+
+    if type.rawValue == 30 || (type.rawValue == 29 && kind == 8) {
       let ns = NSEvent(cgEvent: cgEvent)
-      let zoomField = CGEventField(rawValue: 113)!
-      let mag = ns?.magnification ?? CGFloat(cgEvent.getDoubleValueField(zoomField))
+      let mag = (ns?.type == .magnify && abs(ns?.magnification ?? 0) > 0.0001)
+        ? ns!.magnification
+        : zoom
       if overPanel, abs(mag) > 0.0001 {
-        handleMagnifyFromCGEvent(cgEvent, magnification: mag)
+        handleMagnifyFromCGEvent(magnification: mag, mouseLocation: mouse)
         return nil
       }
     } else if type.rawValue == 29 {
-      if overPanel {
-        let zoom = cgEvent.getDoubleValueField(CGEventField(rawValue: 113)!)
-        let kind = cgEvent.getDoubleValueField(CGEventField(rawValue: 110)!)
-        if abs(kind - 6.0) > 0.1, abs(zoom) > 0.00001 {
-          handleMagnifyFromCGEvent(cgEvent, magnification: CGFloat(zoom))
-          return nil
-        }
+      if overPanel, kind != 6, abs(zoom) > 0.00001 {
+        handleMagnifyFromCGEvent(magnification: zoom, mouseLocation: mouse)
+        return nil
       }
     } else if type == .scrollWheel, overPanel {
       let scale = magnifyTapOwner?.viewModel?.imageScale ?? 1
